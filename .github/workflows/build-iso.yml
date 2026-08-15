@@ -1,0 +1,124 @@
+name: Build FlexOS ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flexos-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Normalize executable permissions
+        run: |
+          chmod +x build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot
+          chmod +x config/includes.chroot/usr/bin/flexos-* config/includes.chroot/usr/lib/flexos/flexos-first-login
+      - name: Validate source tree
+        run: ./scripts/validate.sh
+
+  build:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Normalize executable permissions
+        run: |
+          chmod +x build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot
+          chmod +x config/includes.chroot/usr/bin/flexos-* config/includes.chroot/usr/lib/flexos/flexos-first-login
+
+      - name: Reclaim runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          df -h /
+
+      - name: Build inside Debian 13
+        run: |
+          docker run --rm --privileged \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            debian:13 \
+            bash -lc '
+              set -eux
+              if [ -f /etc/apt/sources.list.d/debian.sources ]; then
+                sed -i "s/^Components:.*/Components: main contrib non-free-firmware/" /etc/apt/sources.list.d/debian.sources
+              fi
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                live-build debootstrap squashfs-tools xorriso isolinux \
+                syslinux-common grub-efi-amd64-bin grub-efi-amd64-signed shim-signed grub-pc-bin dosfstools \
+                mtools memtest86+ ca-certificates
+              ./scripts/check-package-list.sh
+              ./build.sh
+            '
+
+      - name: Smoke-test ISO structure
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorriso
+          ./scripts/smoke-test-iso.sh FlexOS-*.iso
+
+      - name: Prepare GitHub Release assets
+        run: |
+          ISO="$(find . -maxdepth 1 -name 'FlexOS-*.iso' -print -quit)"
+          ./scripts/package-release.sh "$ISO" release-assets
+
+      - name: Keep build log as a small CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlexOS-build-log-${{ github.sha }}
+          path: build.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish rolling development build
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -f dev-latest "$GITHUB_SHA"
+          git push --force origin refs/tags/dev-latest
+
+          if gh release view dev-latest >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              [[ -n "$asset" ]] && gh release delete-asset dev-latest "$asset" -y
+            done < <(gh release view dev-latest --json assets --jq '.assets[].name')
+            gh release edit dev-latest \
+              --title "FlexOS Development Build" \
+              --prerelease \
+              --notes "Automated development build from main at commit $GITHUB_SHA. For testing only."
+          else
+            gh release create dev-latest \
+              --title "FlexOS Development Build" \
+              --prerelease \
+              --notes "Automated development build from main at commit $GITHUB_SHA. For testing only."
+          fi
+          gh release upload dev-latest release-assets/* --clobber
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "FlexOS ${GITHUB_REF_NAME#v}" \
+              --generate-notes
+          gh release upload "${GITHUB_REF_NAME}" release-assets/* --clobber
