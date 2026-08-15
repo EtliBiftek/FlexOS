@@ -2,13 +2,12 @@
 live-boot
 live-config
 live-config-systemd
+user-setup
 linux-image-amd64
 systemd-sysv
 locales
 keyboard-configuration
 console-setup
-user-setup
-linux-image-amd64
 
 # KDE Plasma 6 - intentionally not the full kde-standard/kde-full metapackage
 plasma-desktop
