@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+. /etc/os-release
+printf '%s\n' "${PRETTY_NAME:-FlexOS}"
+printf '%s\n' "Creator: Pifo"
+printf '%s\n' "Base: Debian 13 (Trixie)"
+printf '%s\n' "Desktop: KDE Plasma"
+printf '%s\n' "Project: https://github.com/EtliBiftek/FlexOS"
+printf '%s\n' "Issues: https://github.com/EtliBiftek/FlexOS/issues"

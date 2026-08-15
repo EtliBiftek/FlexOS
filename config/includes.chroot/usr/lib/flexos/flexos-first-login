@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -u
+marker="${XDG_CONFIG_HOME:-$HOME/.config}/flexos/initialized-v0.1"
+[[ -e "$marker" ]] && exit 0
+mkdir -p "$(dirname "$marker")" "$HOME/Desktop" "$HOME/Downloads" "$HOME/Documents" "$HOME/Pictures" "$HOME/Videos" "$HOME/Music"
+
+command -v plasma-apply-colorscheme >/dev/null 2>&1 && plasma-apply-colorscheme BreezeDark >/dev/null 2>&1 || true
+command -v plasma-apply-desktoptheme >/dev/null 2>&1 && plasma-apply-desktoptheme breeze-dark >/dev/null 2>&1 || true
+command -v plasma-apply-wallpaperimage >/dev/null 2>&1 && plasma-apply-wallpaperimage /usr/share/wallpapers/FlexOS/contents/images/2560x1440.svg >/dev/null 2>&1 || true
+
+# Put the installer on the live desktop only. Installed users should not see it.
+if grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
+  cp -f /usr/share/applications/flexos-installer.desktop "$HOME/Desktop/Install FlexOS.desktop" 2>/dev/null || true
+  chmod +x "$HOME/Desktop/Install FlexOS.desktop" 2>/dev/null || true
+fi
+
+touch "$marker"

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="78%">
+      <stop offset="0" stop-color="#292b2f"/>
+      <stop offset="0.55" stop-color="#161719"/>
+      <stop offset="1" stop-color="#0a0b0c"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="480" fill="url(#bg)"/>
+  <g transform="translate(256 120) scale(.25)">
+    <rect width="512" height="512" rx="108" fill="#0d0e10" stroke="#34363a" stroke-width="8"/>
+    <path d="M134 116h258v72H218v70h145v70H218v122h-84z" fill="#d2d4d7"/>
+    <path d="M330 328l74 61-74 61v-38h-92v-46h92z" fill="#74777c"/>
+  </g>
+  <text x="320" y="285" text-anchor="middle" font-family="sans-serif" font-size="34" font-weight="600" fill="#e4e5e7">FlexOS</text>
+  <text x="320" y="316" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#85888e">Clean · Flexible · Yours</text>
+</svg>

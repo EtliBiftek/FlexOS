@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1440" viewBox="0 0 2560 1440">
+  <defs>
+    <radialGradient id="g" cx="70%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#292b2f"/>
+      <stop offset="0.48" stop-color="#17181b"/>
+      <stop offset="1" stop-color="#090a0b"/>
+    </radialGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a9acb1" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#4a4d52" stop-opacity=".03"/>
+    </linearGradient>
+  </defs>
+  <rect width="2560" height="1440" fill="url(#g)"/>
+  <path d="M1480 -80L2560 530v250L1370 110z" fill="url(#line)"/>
+  <path d="M1650 1440L2560 900v235l-560 305z" fill="#70737a" opacity=".07"/>
+  <g transform="translate(180 1010)">
+    <rect width="164" height="164" rx="35" fill="#111214" stroke="#3c3e42" stroke-width="2"/>
+    <path d="M43 37h83v23H70v22h47v22H70v39H43z" fill="#d2d4d7"/>
+    <path d="M106 104l24 20-24 20v-12H76v-15h30z" fill="#74777c"/>
+  </g>
+  <text x="374" y="1117" font-family="sans-serif" font-size="86" font-weight="600" fill="#d5d7da">FlexOS</text>
+  <text x="378" y="1170" font-family="sans-serif" font-size="25" letter-spacing="7" fill="#74777c">CLEAN. FLEXIBLE. YOURS.</text>
+</svg>

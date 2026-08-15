@@ -1,0 +1,14 @@
+PRETTY_NAME="FlexOS 0.1 Alpha"
+NAME="FlexOS"
+VERSION_ID="0.1"
+VERSION="0.1 Alpha"
+VERSION_CODENAME=trixie
+ID=flexos
+ID_LIKE=debian
+HOME_URL="https://github.com/EtliBiftek/FlexOS"
+SUPPORT_URL="https://github.com/EtliBiftek/FlexOS/issues"
+BUG_REPORT_URL="https://github.com/EtliBiftek/FlexOS/issues"
+DOCUMENTATION_URL="https://github.com/EtliBiftek/FlexOS"
+LOGO=flexos-logo
+ANSI_COLOR="90"
+BUILD_ID="0.1.0-alpha.1"

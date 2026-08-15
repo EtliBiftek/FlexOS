@@ -1,0 +1,112 @@
+# Live system and kernel
+live-boot
+live-config
+live-config-systemd
+linux-image-amd64
+systemd-sysv
+locales
+keyboard-configuration
+console-setup
+
+# KDE Plasma 6 - intentionally not the full kde-standard/kde-full metapackage
+plasma-desktop
+plasma-workspace
+kwin-wayland
+kwin-x11
+sddm
+sddm-theme-breeze
+systemsettings
+kinfocenter
+plasma-systemmonitor
+powerdevil
+polkit-kde-agent-1
+xdg-desktop-portal-kde
+xdg-user-dirs
+xdg-utils
+kio-fuse
+kio-extras
+kscreen
+kde-config-screenlocker
+kde-config-sddm
+breeze-gtk-theme
+fonts-noto-core
+fonts-noto-color-emoji
+libpam-kwallet5
+ksystemstats
+
+# Network, Bluetooth and audio
+network-manager
+plasma-nm
+bluez
+bluedevil
+pipewire
+pipewire-audio
+wireplumber
+plasma-pa
+
+# Essential desktop applications
+dolphin
+konsole
+kate
+ark
+spectacle
+gwenview
+okular
+firefox-esr
+
+# Filesystems, storage and hardware
+udisks2
+upower
+parted
+dosfstools
+e2fsprogs
+btrfs-progs
+exfatprogs
+ntfs-3g
+cryptsetup
+efibootmgr
+smartmontools
+fwupd
+
+# Boot and installer
+grub-common
+grub-pc
+grub-pc-bin
+grub-efi-amd64
+grub-efi-amd64-signed
+shim-signed
+os-prober
+memtest86+
+calamares
+calamares-settings-debian
+
+# Firmware and CPU microcode
+firmware-linux-free
+firmware-linux-nonfree
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-mediatek
+intel-microcode
+amd64-microcode
+
+# Base utilities
+sudo
+ca-certificates
+curl
+wget
+less
+nano
+bash-completion
+man-db
+pciutils
+usbutils
+lsof
+htop
+
+# FlexOS visual boot
+plymouth
+plymouth-themes
+
+# Installer XWayland authorization helper
+x11-xserver-utils

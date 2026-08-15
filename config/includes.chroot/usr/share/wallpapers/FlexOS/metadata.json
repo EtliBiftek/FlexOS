@@ -1,0 +1,8 @@
+{
+  "KPlugin": {
+    "Id": "FlexOS",
+    "Name": "FlexOS Dark",
+    "Description": "Default FlexOS wallpaper",
+    "Authors": [{"Name": "Pifo"}]
+  }
+}

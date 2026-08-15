@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if ! grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
+  command -v kdialog >/dev/null 2>&1 && kdialog --error "FlexOS Installer is intended to run from the live environment." || true
+  exit 1
+fi
+if command -v calamares-install-debian >/dev/null 2>&1; then
+  exec calamares-install-debian "$@"
+fi
+# Fallback for package layout changes.
+export QT_AUTO_SCREEN_SCALE_FACTOR=1
+xhost +si:localuser:root >/dev/null 2>&1 || true
+exec pkexec calamares "$@"

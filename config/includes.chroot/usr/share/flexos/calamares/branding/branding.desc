@@ -1,0 +1,28 @@
+---
+componentName: debian
+
+strings:
+    productName:         FlexOS
+    shortProductName:    FlexOS
+    version:             0.1 Alpha
+    shortVersion:        0.1
+    versionedName:       FlexOS 0.1 Alpha
+    shortVersionedName:  FlexOS 0.1
+    bootloaderEntryName: FlexOS
+    productUrl:          https://github.com/EtliBiftek/FlexOS
+    supportUrl:          https://github.com/EtliBiftek/FlexOS/issues
+    knownIssuesUrl:      https://github.com/EtliBiftek/FlexOS/issues
+    releaseNotesUrl:     https://github.com/EtliBiftek/FlexOS/releases
+
+images:
+    productLogo:    flexos-logo.svg
+    productIcon:    flexos-logo.svg
+    productWelcome: welcome.svg
+
+style:
+    sidebarBackground:    "#151619"
+    sidebarText:          "#aeb0b4"
+    sidebarTextSelect:    "#ffffff"
+    sidebarTextHighlight: "#777a80"
+
+windowExpanding: normal

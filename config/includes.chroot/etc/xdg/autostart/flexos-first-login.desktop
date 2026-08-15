@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=FlexOS First Login
+Exec=/usr/lib/flexos/flexos-first-login
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-after=panel

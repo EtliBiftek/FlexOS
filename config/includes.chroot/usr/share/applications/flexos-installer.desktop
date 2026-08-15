@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install FlexOS
+Name[tr]=FlexOS'u Kur
+GenericName=System Installer
+GenericName[tr]=Sistem Kurucusu
+Comment=Install FlexOS to your computer
+Comment[tr]=FlexOS'u bilgisayarınıza kurun
+Exec=flexos-installer
+TryExec=flexos-installer
+Icon=flexos-logo
+Terminal=false
+Categories=Qt;System;
+StartupNotify=true
+StartupWMClass=calamares
+Keywords=flexos;install;installer;system;calamares;
+
+NoDisplay=true

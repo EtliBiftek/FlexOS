@@ -1,0 +1,25 @@
+title-text: "FlexOS"
+title-color: "#d5d7da"
+desktop-color: "#101113"
+terminal-box: "0 0 0 0"
+terminal-border: "0"
++ boot_menu {
+  left = 20%
+  top = 32%
+  width = 60%
+  height = 42%
+  item_color = "#a6a8ac"
+  selected_item_color = "#ffffff"
+  item_height = 36
+  item_padding = 8
+  item_spacing = 4
+}
++ label {
+  id = __timeout__
+  left = 20%
+  top = 78%
+  width = 60%
+  align = "center"
+  color = "#777a80"
+  text = "Booting in %d seconds"
+}
