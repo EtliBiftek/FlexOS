@@ -79,6 +79,7 @@ os-prober
 memtest86+
 calamares
 calamares-settings-debian
+squashfs-tools
 
 # Firmware and CPU microcode
 firmware-linux-free
