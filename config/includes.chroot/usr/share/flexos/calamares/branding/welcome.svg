@@ -1,12 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440">
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d0f11"/><stop offset="1" stop-color="#1d2126"/></linearGradient></defs>
-<rect width="900" height="440" rx="28" fill="url(#g)"/>
-<rect x="48" y="48" width="804" height="344" rx="22" fill="#15181c" stroke="#30353c"/>
-<rect x="88" y="108" width="145" height="145" rx="34" fill="#0b0d0f"/>
-<path d="M126 142h74v22h-49v20h42v21h-42v36h-25z" fill="#e3e5e7"/>
-<path d="M181 206h21v-12l25 20-25 20v-12h-25v-16z" fill="#797e85"/>
-<text x="284" y="160" font-family="sans-serif" font-size="48" font-weight="700" fill="#f0f1f2">FlexOS</text>
-<text x="287" y="201" font-family="sans-serif" font-size="18" fill="#9499a0">KDE Plasma Edition</text>
-<text x="287" y="249" font-family="sans-serif" font-size="17" fill="#c9ccd0">Clean. Flexible. Yours.</text>
-<text x="287" y="292" font-family="sans-serif" font-size="14" fill="#777c83">Debian 13 based · Created by Pifo</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0d0f11"/>
+      <stop offset="1" stop-color="#1d2126"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="440" rx="28" fill="url(#bg)"/>
+  <circle cx="830" cy="60" r="150" fill="#24282e" opacity=".35"/>
+  <rect x="48" y="48" width="804" height="344" rx="22" fill="#15181c" stroke="#30353c"/>
+  <rect x="88" y="105" width="148" height="148" rx="34" fill="#0b0d0f"/>
+  <path d="M126 139h76v22h-51v21h44v21h-44v38h-25z" fill="#e3e5e7"/>
+  <path d="M181 205h22v-12l25 20-25 20v-12h-26v-16z" fill="#797e85"/>
+  <text x="285" y="155" font-family="sans-serif" font-size="48" font-weight="700" fill="#f0f1f2">FlexOS</text>
+  <text x="288" y="197" font-family="sans-serif" font-size="18" fill="#9499a0">KDE Plasma Edition</text>
+  <text x="288" y="244" font-family="sans-serif" font-size="17" fill="#c9ccd0">Clean. Flexible. Yours.</text>
+  <text x="288" y="287" font-family="sans-serif" font-size="14" fill="#777c83">0.5 Beta Preview · Debian 13 · Created by Pifo</text>
+  <rect x="288" y="317" width="145" height="34" rx="17" fill="#e3e5e7"/>
+  <text x="360" y="339" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="700" fill="#121416">BETA PREVIEW</text>
 </svg>

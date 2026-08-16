@@ -1,8 +1,7 @@
 {
   "KPlugin": {
-    "Id": "FlexOS",
-    "Name": "FlexOS Dark",
-    "Description": "Default FlexOS wallpaper",
-    "Authors": [{"Name": "Pifo"}]
-  }
+    "Name": "FlexOS",
+    "Id": "FlexOS"
+  },
+  "X-KDE-PlasmaImageWallpaper-AccentColor": "#74777c"
 }

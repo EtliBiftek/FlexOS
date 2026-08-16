@@ -1,3 +1,7 @@
-FlexOS 0.1 Alpha
-Created by Pifo
-https://github.com/EtliBiftek/FlexOS
+FlexOS 0.5 Beta Preview
+Created by Pifo · KDE Plasma 6 · Debian 13 (Trixie)
+
+Useful commands:
+  flex info
+  flex doctor
+  flex components check

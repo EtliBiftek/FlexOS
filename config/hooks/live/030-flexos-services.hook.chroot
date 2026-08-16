@@ -1,20 +1,33 @@
 #!/bin/sh
 set -eu
+
 systemctl enable NetworkManager.service || true
 systemctl enable sddm.service || true
 systemctl enable bluetooth.service || true
 systemctl enable power-profiles-daemon.service || true
 systemctl enable flexos-profile.service || true
 systemctl enable flexos-identity.service || true
+systemctl enable flexos-ci-smoke.service || true
 systemctl enable ufw.service || true
 systemctl set-default graphical.target || true
+
 mkdir -p /etc/flexos
 [ -e /etc/flexos/profile ] || printf 'balanced\n' > /etc/flexos/profile
 [ -e /etc/flexos/desktop-profile ] || printf 'kde\n' > /etc/flexos/desktop-profile
+
 ufw default deny incoming >/dev/null 2>&1 || true
 ufw default allow outgoing >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
-command -v plymouth-set-default-theme >/dev/null 2>&1 && plymouth-set-default-theme flexos || true
-command -v update-initramfs >/dev/null 2>&1 && update-initramfs -u -k all || true
+
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+  plymouth-set-default-theme flexos || true
+fi
+if command -v update-initramfs >/dev/null 2>&1; then
+  update-initramfs -u -k all || true
+fi
+if command -v update-grub >/dev/null 2>&1; then
+  update-grub || true
+fi
+
 apt-get clean || true
 rm -f /var/cache/apt/archives/*.deb 2>/dev/null || true

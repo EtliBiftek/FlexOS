@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile, urllib.request
+from pathlib import Path
+
+API="https://api.github.com/repos/EtliBiftek/FlexOS/releases/tags/packages-latest"
+UA={"User-Agent":"FlexOS-Self-Updater/0.5"}
+
+def get(url, timeout=30):
+    req=urllib.request.Request(url,headers=UA)
+    with urllib.request.urlopen(req,timeout=timeout) as r:
+        return r.read()
+
+def release_manifest():
+    release=json.loads(get(API).decode("utf-8"))
+    asset=next((x for x in release.get("assets",[]) if x.get("name")=="flexos-packages-manifest.json"),None)
+    if not asset:
+        raise RuntimeError("packages-latest does not contain flexos-packages-manifest.json")
+    return json.loads(get(asset["browser_download_url"]).decode("utf-8"))
+
+def installed_version(name):
+    p=subprocess.run(["dpkg-query","-W","-f=${Version}",name],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    return p.stdout.strip() if p.returncode==0 else None
+
+def newer(new, old):
+    if old is None:
+        return True
+    return subprocess.run(["dpkg","--compare-versions",new,"gt",old]).returncode==0
+
+def updates(manifest):
+    out=[]
+    for item in manifest.get("packages",[]):
+        old=installed_version(item["name"])
+        if newer(item["version"],old):
+            row=dict(item);row["installed"]=old;out.append(row)
+    return out
+
+def print_status(manifest, rows):
+    print(f"FlexOS component channel: {manifest.get('channel','unknown')}")
+    print(f"Product build: {manifest.get('product_version','unknown')}")
+    if not rows:
+        print("FlexOS components are up to date.")
+        return
+    print(f"{len(rows)} component update(s) available:")
+    for x in rows:
+        print(f"  {x['name']}: {x.get('installed') or 'not package-managed'} -> {x['version']}")
+
+def install(manifest, rows):
+    if not rows:
+        print_status(manifest,rows);return 0
+    tmp=Path(tempfile.mkdtemp(prefix="flexos-update-"))
+    os.chmod(tmp,0o755)
+    try:
+        names=[]
+        for item in rows:
+            filename=item["filename"]
+            dest=tmp/filename
+            print(f"Downloading {filename} ...",flush=True)
+            dest.write_bytes(get(item["url"],120))
+            digest=hashlib.sha256(dest.read_bytes()).hexdigest()
+            if digest.lower()!=item["sha256"].lower():
+                raise RuntimeError(f"SHA256 mismatch for {filename}")
+            os.chmod(dest,0o644)
+            names.append(filename)
+        cmd=["pkexec","/usr/lib/flexos/flex-admin","flexupdate","install",str(tmp),*names]
+        return subprocess.run(cmd).returncode
+    finally:
+        shutil.rmtree(tmp,ignore_errors=True)
+
+def main():
+    ap=argparse.ArgumentParser(description="Check and install FlexOS-authored component updates.")
+    ap.add_argument("action",choices=["check","install"])
+    ap.add_argument("--json",action="store_true")
+    args=ap.parse_args()
+    try:
+        manifest=release_manifest()
+        rows=updates(manifest)
+        if args.json:
+            print(json.dumps({"manifest":manifest,"updates":rows},ensure_ascii=False,indent=2))
+            return 0
+        print_status(manifest,rows)
+        if args.action=="install":
+            return install(manifest,rows)
+        return 0
+    except Exception as e:
+        print(f"FlexOS component update error: {e}",file=sys.stderr)
+        return 2
+
+if __name__=="__main__":
+    raise SystemExit(main())

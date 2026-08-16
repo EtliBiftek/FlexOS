@@ -1,0 +1,11 @@
+[Unit]
+Description=FlexOS CI boot sentinel
+After=multi-user.target
+ConditionKernelCommandLine=flexos.ci=1
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'printf "FLEXOS_CI_BOOT_OK\n" >/dev/ttyS0'
+
+[Install]
+WantedBy=multi-user.target

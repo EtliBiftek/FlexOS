@@ -1,10 +1,13 @@
 [Unit]
 Description=Apply FlexOS system profile
 After=power-profiles-daemon.service
+ConditionPathExists=/usr/lib/flexos/flex-profile-apply
+
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/flexos/flex-profile-apply
 TimeoutStartSec=8s
 RemainAfterExit=yes
+
 [Install]
 WantedBy=multi-user.target

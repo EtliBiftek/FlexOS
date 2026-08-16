@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -u
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+LOG=/var/log/flexos-recovery.log
+touch "$LOG"
+chmod 0600 "$LOG" 2>/dev/null || true
+
+run_action() {
+    local title="$1"; shift
+    clear
+    echo "FlexOS Recovery - $title"
+    echo "========================================"
+    echo "+ $*"
+    "$@" 2>&1 | tee -a "$LOG"
+    local rc=${PIPESTATUS[0]}
+    echo
+    echo "Exit code: $rc"
+    echo "Press Enter to return."
+    read -r _
+}
+
+snapshot_rollback() {
+    if [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" != "btrfs" || ! -f /etc/snapper/configs/root ]]; then
+        whiptail --title "FlexOS Recovery" --msgbox "Btrfs + Snapper root configuration is not available." 10 60
+        return
+    fi
+    local id
+    id="$(whiptail --title "FlexOS Snapshot Rollback" --inputbox "Snapshot ID:" 10 50 3>&1 1>&2 2>&3)" || return
+    [[ "$id" =~ ^[0-9]+$ ]] || { whiptail --msgbox "Invalid snapshot ID." 8 40; return; }
+    if whiptail --yesno "Prepare rollback to snapshot $id? A reboot will be required." 10 65; then
+        run_action "Snapshot rollback" /usr/lib/flexos/flex-admin snapshot rollback "$id"
+    fi
+}
+
+while true; do
+    choice="$(
+      whiptail --title "FlexOS Recovery" \
+        --backtitle "FlexOS 0.5 Beta Recovery · Created by Pifo" \
+        --menu "Choose a recovery action. Log: $LOG" 22 78 13 \
+        "1" "System / hardware information" \
+        "2" "Repair DPKG configuration" \
+        "3" "Repair broken APT packages" \
+        "4" "Rebuild APT package index" \
+        "5" "Rebuild initramfs" \
+        "6" "Rebuild GRUB configuration" \
+        "7" "Restart NetworkManager" \
+        "8" "Remove proprietary NVIDIA driver" \
+        "9" "Snapshot list" \
+        "10" "Snapshot rollback" \
+        "11" "Root shell (advanced)" \
+        "12" "Reboot" \
+        "13" "Power off" \
+        3>&1 1>&2 2>&3
+    )" || choice="12"
+
+    case "$choice" in
+      1) run_action "System information" /usr/bin/flex hardware ;;
+      2) run_action "DPKG repair" /usr/lib/flexos/flex-admin repair dpkg ;;
+      3) run_action "Package repair" /usr/lib/flexos/flex-admin repair packages ;;
+      4) run_action "APT repair" /usr/lib/flexos/flex-admin repair apt ;;
+      5) run_action "initramfs rebuild" /usr/lib/flexos/flex-admin repair initramfs ;;
+      6) run_action "GRUB rebuild" /usr/lib/flexos/flex-admin repair grub ;;
+      7) run_action "Network repair" /usr/lib/flexos/flex-admin repair network ;;
+      8)
+         if whiptail --yesno "Remove Debian proprietary NVIDIA packages and rebuild initramfs? Use this after a black-screen regression." 12 70; then
+             run_action "NVIDIA removal" /usr/lib/flexos/flex-admin driver nvidia-remove
+         fi
+         ;;
+      9) run_action "Snapshot list" /usr/lib/flexos/flex-admin snapshot list ;;
+      10) snapshot_rollback ;;
+      11)
+         clear
+         echo "FlexOS Recovery root shell. Type 'exit' to return."
+         /bin/bash
+         ;;
+      12) systemctl reboot; exit 0 ;;
+      13) systemctl poweroff; exit 0 ;;
+    esac
+done

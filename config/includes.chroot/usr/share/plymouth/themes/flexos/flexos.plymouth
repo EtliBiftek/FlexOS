@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=FlexOS
-Description=FlexOS dark boot theme
+Description=FlexOS boot splash
 ModuleName=script
 
 [script]

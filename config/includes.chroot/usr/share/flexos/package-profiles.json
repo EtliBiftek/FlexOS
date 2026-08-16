@@ -2,12 +2,12 @@
   "minimal": {
     "name": "Minimal",
     "packages": [],
-    "description": "Only the FlexOS base and selected desktop. No extra application bundle."
+    "description": "KDE Plasma ve FlexOS temel sistemi; ek paket yok."
   },
   "standard": {
-    "name": "Standard",
+    "name": "Standart",
     "packages": [],
-    "description": "The normal FlexOS application set already included in the ISO."
+    "description": "Önerilen FlexOS masaüstü kurulumu."
   },
   "gaming": {
     "name": "Gaming",
@@ -16,10 +16,10 @@
       "mangohud",
       "vulkan-tools"
     ],
-    "description": "Gaming performance and Vulkan monitoring tools. Internet required."
+    "description": "Oyun performansı ve Vulkan izleme araçları."
   },
   "developer": {
-    "name": "Developer",
+    "name": "Geliştirici",
     "packages": [
       "git",
       "build-essential",
@@ -29,7 +29,7 @@
       "python3-pip",
       "python3-venv"
     ],
-    "description": "Compilers, Git, CMake, Ninja and Python development tools. Internet required."
+    "description": "Derleyiciler, Git, CMake, Ninja ve Python geliştirme araçları."
   },
   "creator": {
     "name": "Creator",
@@ -40,6 +40,6 @@
       "inkscape",
       "audacity"
     ],
-    "description": "Creative applications for video, graphics, 3D and audio. Internet required."
+    "description": "Video, grafik, 3B ve ses üretimi uygulamaları."
   }
 }

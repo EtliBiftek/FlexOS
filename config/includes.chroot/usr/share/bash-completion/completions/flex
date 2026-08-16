@@ -1,2 +1,26 @@
-_flex_complete(){ local cur="${COMP_WORDS[COMP_CWORD]}"; if [[ ${COMP_CWORD} -eq 1 ]];then COMPREPLY=( $(compgen -W "info hardware doctor recommend security drivers updates snapshots kernel profile center welcome report" -- "$cur") );fi; }
+_flex_complete() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    if [[ ${COMP_CWORD} -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "info hardware doctor recommend security drivers updates snapshots kernel profile components repo driver center welcome report beta-check" -- "$cur") )
+        return
+    fi
+    case "${COMP_WORDS[1]}" in
+      profile)
+        if [[ ${COMP_CWORD} -eq 2 ]]; then
+          COMPREPLY=( $(compgen -W "list show set" -- "$cur") )
+        elif [[ "${COMP_WORDS[2]}" == "set" ]]; then
+          COMPREPLY=( $(compgen -W "balanced performance gaming battery creator minimal" -- "$cur") )
+        fi
+        ;;
+      components)
+        COMPREPLY=( $(compgen -W "check install" -- "$cur") )
+        ;;
+      repo)
+        COMPREPLY=( $(compgen -W "enable disable" -- "$cur") )
+        ;;
+      driver)
+        COMPREPLY=( $(compgen -W "install-nvidia remove-nvidia" -- "$cur") )
+        ;;
+    esac
+}
 complete -F _flex_complete flex

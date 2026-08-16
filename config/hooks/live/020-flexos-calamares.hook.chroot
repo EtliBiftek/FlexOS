@@ -1,46 +1,144 @@
 #!/bin/sh
 set -eu
-if [ -d /etc/calamares/branding/debian ];then
- cp -f /usr/share/flexos/calamares/branding/branding.desc /etc/calamares/branding/debian/branding.desc
- cp -f /usr/share/flexos/calamares/branding/flexos-logo.svg /etc/calamares/branding/debian/flexos-logo.svg
- cp -f /usr/share/flexos/calamares/branding/welcome.svg /etc/calamares/branding/debian/welcome.svg
- cp -f /usr/share/flexos/calamares/branding/show.qml /etc/calamares/branding/debian/show.qml
+
+if [ -d /etc/calamares/branding/debian ]; then
+  cp -f /usr/share/flexos/calamares/branding/branding.desc /etc/calamares/branding/debian/branding.desc
+  cp -f /usr/share/flexos/calamares/branding/flexos-logo.svg /etc/calamares/branding/debian/flexos-logo.svg
+  cp -f /usr/share/flexos/calamares/branding/welcome.svg /etc/calamares/branding/debian/welcome.svg
+  cp -f /usr/share/flexos/calamares/branding/show.qml /etc/calamares/branding/debian/show.qml
 fi
+
 mkdir -p /etc/calamares/modules
 cp -f /usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf /etc/calamares/modules/
 cp -f /usr/share/flexos/calamares/modules/contextualprocess-flexpackages.conf /etc/calamares/modules/
-rm -f /etc/calamares/modules/packagechooser-desktop.conf /etc/calamares/modules/contextualprocess-flexdesktop.conf
+cp -f /usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf /etc/calamares/modules/
+
+rm -f /etc/calamares/modules/packagechooser-desktop.conf
+rm -f /etc/calamares/modules/contextualprocess-flexdesktop.conf
+rm -f /usr/share/flexos/calamares/modules/packagechooser-desktop.conf
+rm -f /usr/share/flexos/calamares/modules/contextualprocess-flexdesktop.conf
+
+# Keep Debian's tested partition module but expose only the filesystems FlexOS
+# promises to QA for 0.5 beta: ext4 and Btrfs. LUKS remains enabled.
+# FlexOS 0.5 promises Btrfs rollback only with a real root subvolume.
+# Calamares 3.3's standard mount configuration uses /@; fail the ISO build
+# instead of silently shipping a top-level Btrfs layout.
+if [ ! -f /etc/calamares/modules/mount.conf ] || ! grep -Eq 'subvolume:[[:space:]]*/?@([[:space:]]|$)' /etc/calamares/modules/mount.conf; then
+  echo "ERROR: Calamares mount.conf does not define a /@ Btrfs root subvolume." >&2
+  exit 1
+fi
+
 python3 - <<'PY'
 from pathlib import Path
-p=Path("/etc/calamares/settings.conf");t=p.read_text()
-if "hide-back-and-next-during-exec:" not in t:t+="\nhide-back-and-next-during-exec: false\n"
-lines=[x for x in t.splitlines() if "packagechooser@desktop" not in x and "contextualprocess@flexdesktop" not in x]
-t="\n".join(lines)+"\n"
-items="""  - id: packageprofile
+import re
+
+p=Path("/etc/calamares/modules/partition.conf")
+if p.exists():
+    text=p.read_text()
+    def replace_active(key, value):
+        nonlocal_text = None
+        return
+    rules={
+        r'(?m)^\s*defaultFileSystemType:\s*.*$':'defaultFileSystemType: "ext4"',
+        r'(?m)^\s*availableFileSystemTypes:\s*.*$':'availableFileSystemTypes: ["ext4","btrfs"]',
+        r'(?m)^\s*enableLuksAutomatedPartitioning:\s*.*$':'enableLuksAutomatedPartitioning: true',
+        r'(?m)^\s*initialPartitioningChoice:\s*.*$':'initialPartitioningChoice: none',
+    }
+    for pattern,replacement in rules.items():
+        if re.search(pattern,text):
+            text=re.sub(pattern,replacement,text)
+        else:
+            text += "\n"+replacement+"\n"
+    # Debian / upstream can ship availableFileSystemTypes only as a commented
+    # example. Ensure our active key exists.
+    if not re.search(r'(?m)^availableFileSystemTypes:',text):
+        text += '\navailableFileSystemTypes: ["ext4","btrfs"]\n'
+    p.write_text(text.rstrip()+"\n")
+PY
+
+python3 - <<'PY'
+from pathlib import Path
+
+p=Path("/etc/calamares/settings.conf")
+text=p.read_text()
+
+if "hide-back-and-next-during-exec:" not in text:
+    text += "\nhide-back-and-next-during-exec: false\n"
+
+# Remove stale multi-desktop alpha references.
+lines=[
+    line for line in text.splitlines()
+    if "packagechooser@desktop" not in line
+    and "contextualprocess@flexdesktop" not in line
+]
+text="\n".join(lines)+"\n"
+
+instances="""  - id: packageprofile
     module: packagechooser
     config: packagechooser-flexpackages.conf
   - id: flexpackages
     module: contextualprocess
     config: contextualprocess-flexpackages.conf
     weight: 4
+  - id: flexpostinstall
+    module: shellprocess
+    config: shellprocess-flexpostinstall.conf
+    weight: 3
 """
-if "id: packageprofile" not in t:
- q=t.find("sequence:")
- if q<0:raise SystemExit("Calamares settings.conf has no sequence")
- b,a=t[:q],t[q:]
- b=b.rstrip()+"\n"+(items if "instances:" in b else "\ninstances:\n"+items)+"\n"
- t=b+a
-lines=t.splitlines()
+
+if "id: packageprofile" not in text:
+    pos=text.find("sequence:")
+    if pos < 0:
+        raise SystemExit("Calamares settings.conf has no sequence")
+    before,after=text[:pos],text[pos:]
+    if "instances:" in before:
+        before=before.rstrip()+"\n"+instances+"\n"
+    else:
+        before=before.rstrip()+"\n\ninstances:\n"+instances+"\n"
+    text=before+after
+elif "id: flexpostinstall" not in text:
+    pos=text.find("sequence:")
+    before,after=text[:pos],text[pos:]
+    before=before.rstrip()+""" 
+  - id: flexpostinstall
+    module: shellprocess
+    config: shellprocess-flexpostinstall.conf
+    weight: 3
+"""
+    text=before+"\n"+after
+
+lines=text.splitlines()
+
 if not any("packagechooser@packageprofile" in x for x in lines):
- for i,x in enumerate(lines):
-  if x.strip()=="- partition":
-   ind=x[:len(x)-len(x.lstrip())];lines[i+1:i+1]=[ind+"- packagechooser@packageprofile"];break
+    for i,line in enumerate(lines):
+        if line.strip()=="- partition":
+            indent=line[:len(line)-len(line.lstrip())]
+            lines[i+1:i+1]=[indent+"- packagechooser@packageprofile"]
+            break
+
+# Package profiles need final network sources; postinstall must be the final
+# target-side job before Calamares unmounts the installed system.
 if not any("contextualprocess@flexpackages" in x for x in lines):
- for i,x in enumerate(lines):
-  if x.strip()=="- sources-final":
-   ind=x[:len(x)-len(x.lstrip())];lines[i+1:i+1]=[ind+"- contextualprocess@flexpackages"];break
+    for i,line in enumerate(lines):
+        if line.strip()=="- sources-final":
+            indent=line[:len(line)-len(line.lstrip())]
+            lines[i+1:i+1]=[indent+"- contextualprocess@flexpackages"]
+            break
+
+if not any("shellprocess@flexpostinstall" in x for x in lines):
+    for i,line in enumerate(lines):
+        if line.strip()=="- umount":
+            indent=line[:len(line)-len(line.lstrip())]
+            lines[i:i]=[indent+"- shellprocess@flexpostinstall"]
+            break
+
 p.write_text("\n".join(lines).rstrip()+"\n")
 PY
-rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop /usr/share/applications/calamares-install-debian.desktop
-chmod 0755 /usr/bin/flexos-installer /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome /usr/bin/flex-system-report
-chmod 0755 /usr/lib/flexos/flex-admin /usr/lib/flexos/flexsuite.py /usr/lib/flexos/flex-snapshot-pre /usr/lib/flexos/flexos-first-login
+
+rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
+rm -f /usr/share/applications/calamares-install-debian.desktop
+
+chmod 0755 /usr/bin/flexos-installer /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome /usr/bin/flex-system-report /usr/bin/flex-self-update /usr/bin/flex-beta-check
+chmod 0755 /usr/lib/flexos/flex-postinstall /usr/lib/flexos/flex-recovery-console /usr/lib/flexos/flex-admin /usr/lib/flexos/flexsuite.py
+chmod 0755 /usr/lib/flexos/flexos-first-login /usr/lib/flexos/flex-profile-apply /usr/lib/flexos/flex-package-profile-install
+chmod 0755 /etc/grub.d/41_flexos_recovery

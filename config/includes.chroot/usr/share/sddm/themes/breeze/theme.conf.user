@@ -1,3 +1,4 @@
 [General]
-background=/usr/share/wallpapers/FlexOS/contents/images/2560x1440.svg
 type=image
+background=/usr/share/wallpapers/FlexOS/contents/images/2560x1440.svg
+showClock=true

@@ -1,0 +1,21 @@
+[Unit]
+Description=FlexOS Recovery Console
+After=multi-user.target
+Before=getty@tty1.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/usr/lib/flexos/flex-recovery-console
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/flexos/flex-recovery-console
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=flexos-recovery.target

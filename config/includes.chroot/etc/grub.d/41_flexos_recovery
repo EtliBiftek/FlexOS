@@ -1,0 +1,52 @@
+#!/bin/sh
+set -e
+
+prefix="/usr"
+exec_prefix="${prefix}"
+datarootdir="${prefix}/share"
+
+if [ -f "${datarootdir}/grub/grub-mkconfig_lib" ]; then
+    . "${datarootdir}/grub/grub-mkconfig_lib"
+elif [ -f /usr/lib/grub/grub-mkconfig_lib ]; then
+    . /usr/lib/grub/grub-mkconfig_lib
+else
+    exit 0
+fi
+
+linux="$(ls -1 /boot/vmlinuz-* 2>/dev/null | sort -V | tail -n1)"
+[ -n "$linux" ] || exit 0
+version="${linux#/boot/vmlinuz-}"
+initrd="/boot/initrd.img-${version}"
+[ -f "$initrd" ] || exit 0
+
+root_device="$(grub-probe --target=device / 2>/dev/null || true)"
+boot_device="$(grub-probe --target=device /boot 2>/dev/null || true)"
+[ -n "$boot_device" ] || boot_device="$root_device"
+
+uuid="$(grub-probe --target=fs_uuid / 2>/dev/null || true)"
+
+linux_rel="$(make_system_path_relative_to_its_root "$linux")"
+initrd_rel="$(make_system_path_relative_to_its_root "$initrd")"
+
+rootarg=""
+[ -n "$uuid" ] && rootarg="root=UUID=${uuid}"
+
+rootflags=""
+opts="$(findmnt -n -o OPTIONS / 2>/dev/null || true)"
+subvol="$(printf '%s\n' "$opts" | tr ',' '\n' | sed -n 's/^subvol=//p' | head -n1)"
+[ -n "$subvol" ] && rootflags="rootflags=subvol=${subvol}"
+
+prepare="$(prepare_grub_to_access_device "$boot_device" 2>/dev/null || true)"
+
+cat <<EOF
+menuentry 'FlexOS Recovery' --class flexos --class gnu-linux --class gnu --class os {
+${prepare}
+    linux ${linux_rel} ${rootarg} ${rootflags} ro systemd.unit=flexos-recovery.target plymouth.enable=0
+    initrd ${initrd_rel}
+}
+menuentry 'FlexOS Recovery (Safe Graphics)' --class flexos --class gnu-linux --class gnu --class os {
+${prepare}
+    linux ${linux_rel} ${rootarg} ${rootflags} ro systemd.unit=flexos-recovery.target plymouth.enable=0 nomodeset
+    initrd ${initrd_rel}
+}
+EOF

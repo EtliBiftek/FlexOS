@@ -3,10 +3,11 @@ from __future__ import annotations
 import shutil,subprocess,sys,time
 from pathlib import Path
 from PyQt6.QtCore import QProcess,QTimer
-from PyQt6.QtWidgets import QApplication,QComboBox,QFileDialog,QFrame,QGridLayout,QHBoxLayout,QInputDialog,QLabel,QListWidget,QMainWindow,QMessageBox,QPushButton,QScrollArea,QStackedWidget,QTextEdit,QVBoxLayout,QWidget
+from PyQt6.QtGui import QTextCursor
+from PyQt6.QtWidgets import QApplication,QComboBox,QDialog,QFileDialog,QFrame,QGridLayout,QHBoxLayout,QInputDialog,QLabel,QListWidget,QMainWindow,QMessageBox,QProgressBar,QPushButton,QScrollArea,QStackedWidget,QTextEdit,QVBoxLayout,QWidget
 sys.path.insert(0,"/usr/lib/flexos")
 from flexsuite import *
-from flexlib import FLEX_PROFILES,current_profile,doctor
+from flexlib import FLEX_PROFILES,current_profile,doctor,package_profiles
 
 QSS="""*{font-family:"Noto Sans"}QMainWindow,QWidget{background:#0d0f11;color:#e5e7e9;font-size:14px}
 QWidget#side{background:#121417;border-right:1px solid #25292f}QLabel#brand{font-size:23px;font-weight:700;padding:8px}
@@ -17,6 +18,95 @@ QPushButton{background:#20242a;border:1px solid #373d45;padding:9px 13px;border-
 QPushButton#primary{background:#e6e8ea;color:#101214;border:0;font-weight:600}QTextEdit{background:#101317;border:1px solid #292e35;border-radius:9px;padding:9px}
 QComboBox{background:#171a1f;border:1px solid #30353d;padding:8px;border-radius:8px}QScrollArea{border:0}"""
 
+
+class TaskDialog(QDialog):
+    def __init__(self,title,program,args,on_done=None,parent=None,cancellable=False):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.resize(760,470)
+        self.on_done=on_done
+        self.cancellable=cancellable
+        self.proc=QProcess(self)
+        self.proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+
+        lay=QVBoxLayout(self)
+        self.state=QLabel(f"{title} çalışıyor...")
+        self.state.setStyleSheet("font-size:17px;font-weight:600")
+        lay.addWidget(self.state)
+
+        self.progress=QProgressBar()
+        self.progress.setRange(0,0)
+        lay.addWidget(self.progress)
+
+        self.log=QTextEdit()
+        self.log.setReadOnly(True)
+        lay.addWidget(self.log,1)
+
+        row=QHBoxLayout()
+        row.addStretch()
+        self.cancel=QPushButton("İptal" if cancellable else "İşlem sırasında iptal edilemez")
+        self.cancel.setEnabled(cancellable)
+        self.cancel.clicked.connect(self.cancel_task)
+        row.addWidget(self.cancel)
+        self.closeb=QPushButton("Kapat")
+        self.closeb.setEnabled(False)
+        self.closeb.clicked.connect(self.close)
+        row.addWidget(self.closeb)
+        lay.addLayout(row)
+
+        self.proc.readyReadStandardOutput.connect(self.read_output)
+        self.proc.finished.connect(self.finished_task)
+        self.proc.setProgram(program)
+        self.proc.setArguments(args)
+        self.proc.start()
+
+    def running(self):
+        return self.proc.state()!=QProcess.ProcessState.NotRunning
+
+    def read_output(self):
+        chunk=bytes(self.proc.readAllStandardOutput()).decode(errors="replace")
+        if chunk:
+            self.log.moveCursor(QTextCursor.MoveOperation.End)
+            self.log.insertPlainText(chunk)
+            self.log.ensureCursorVisible()
+
+    def cancel_task(self):
+        if not self.cancellable or not self.running():
+            return
+        if QMessageBox.question(self,"FlexOS","Çalışan işlemi iptal etmek istediğinize emin misiniz?")==QMessageBox.StandardButton.Yes:
+            self.proc.terminate()
+            if not self.proc.waitForFinished(2500):
+                self.proc.kill()
+
+    def finished_task(self,code,_status):
+        self.read_output()
+        self.progress.setRange(0,1)
+        self.progress.setValue(1)
+        self.cancel.setEnabled(False)
+        self.closeb.setEnabled(True)
+        reboot=Path("/run/flexos-reboot-required")
+        debian_reboot=Path("/var/run/reboot-required")
+        if code==0 and (reboot.exists() or debian_reboot.exists()):
+            reasons=[]
+            if reboot.exists():
+                try:
+                    reason=reboot.read_text(errors="ignore").strip()
+                    if reason:reasons.append(reason)
+                except Exception:pass
+            if debian_reboot.exists():
+                try:
+                    reason=debian_reboot.read_text(errors="ignore").strip()
+                    if reason:reasons.append(reason)
+                except Exception:pass
+            self.state.setText("İşlem tamamlandı — yeniden başlatma öneriliyor.")
+            if reasons:self.log.append("\nYeniden başlatma nedeni: "+"; ".join(reasons))
+        else:
+            self.state.setText("İşlem tamamlandı." if code==0 else f"İşlem hata koduyla bitti: {code}")
+        if self.on_done:
+            try:self.on_done(code)
+            except Exception:pass
+
+
 class Card(QFrame):
     def __init__(self,t="",d=""):
         super().__init__();self.setObjectName("card");self.l=QVBoxLayout(self);self.l.setContentsMargins(15,13,15,13)
@@ -24,7 +114,7 @@ class Card(QFrame):
         if d:q=QLabel(d);q.setObjectName("muted");q.setWordWrap(True);self.l.addWidget(q)
 
 class C(QMainWindow):
-    names=["Genel Bakış","Güncellemeler","Sürücüler","Snapshot","Performans","Uygulamalar","Temizlik","Boot & Kernel","Recovery","Loglar","Backup & Sync","Gizlilik","Güvenlik","Donanım","Hakkında"]
+    names=["Genel Bakış","Güncellemeler","Sürücüler","Snapshot","Performans","Paket Profilleri","Uygulamalar","Temizlik","Boot & Kernel","Recovery","Loglar","Backup & Sync","Gizlilik","Güvenlik","Donanım","Beta QA","Hakkında"]
     def __init__(self):
         super().__init__();self.setWindowTitle("Flex Center");self.resize(1210,790);self.setMinimumSize(980,650);self.proc=None;self.prev=None
         b=QWidget();self.setCentralWidget(b);o=QHBoxLayout(b);o.setContentsMargins(0,0,0,0);o.setSpacing(0)
@@ -32,7 +122,7 @@ class C(QMainWindow):
         q=QLabel("F  Flex Center");q.setObjectName("brand");sl.addWidget(q);self.nav=QListWidget();self.nav.addItems(self.names);sl.addWidget(self.nav,1)
         q=QLabel("FlexOS · KDE Plasma Edition\nCreated by Pifo");q.setObjectName("muted");sl.addWidget(q)
         self.stack=QStackedWidget();o.addWidget(s);o.addWidget(self.stack,1)
-        for f in (self.overview,self.updates,self.drivers,self.snapshots,self.performance,self.apps,self.cleanup,self.boot,self.recovery,self.logs,self.backup,self.privacy,self.security,self.hardware,self.about):self.stack.addWidget(f())
+        for f in (self.overview,self.updates,self.drivers,self.snapshots,self.performance,self.packageprofiles,self.apps,self.cleanup,self.boot,self.recovery,self.logs,self.backup,self.privacy,self.security,self.hardware,self.betaqa,self.about):self.stack.addWidget(f())
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex);self.nav.setCurrentRow(0)
         if "--page" in sys.argv:
             try:w=sys.argv[sys.argv.index("--page")+1].lower()
@@ -52,16 +142,19 @@ class C(QMainWindow):
         b.clicked.connect(fn);return b
     def textcard(self,t,fn):
         c=Card(t);x=QTextEdit();x.setReadOnly(True);x.setPlainText(fn());c.l.addWidget(x);return c,x
+    def run_task(self,label,program,args,refresh=None,cancellable=False):
+        if getattr(self,"task",None) and self.task.running():
+            QMessageBox.warning(self,"FlexOS","Başka bir yönetim işlemi devam ediyor.")
+            return
+        def complete(code):
+            if refresh:
+                try:refresh()
+                except Exception:pass
+        self.task=TaskDialog(label,program,args,complete,self,cancellable=cancellable)
+        self.task.show()
+
     def admin(self,args,label,refresh=None):
-        if self.proc and self.proc.state()!=QProcess.ProcessState.NotRunning:QMessageBox.warning(self,"FlexOS","Başka bir işlem devam ediyor.");return
-        self.proc=QProcess(self);self.proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels);self.proc.setProgram("pkexec");self.proc.setArguments(["/usr/lib/flexos/flex-admin"]+args)
-        self.proc.finished.connect(lambda code,_:self.done(code,label,refresh));self.proc.start()
-    def done(self,code,label,refresh):
-        out=bytes(self.proc.readAllStandardOutput()).decode(errors="replace").strip()
-        (QMessageBox.information if code==0 else QMessageBox.warning)(self,"FlexOS",f"{label}: {'tamamlandı' if code==0 else 'hata'}\n\n{out[-2800:]}")
-        if refresh:
-            try:refresh()
-            except:pass
+        self.run_task(label,"pkexec",["/usr/lib/flexos/flex-admin"]+args,refresh,cancellable=False)
     def confirm(self,msg,args,label,refresh=None):
         if QMessageBox.question(self,"FlexOS",msg)==QMessageBox.StandardButton.Yes:self.admin(args,label,refresh)
     def metric(self,n):
@@ -73,11 +166,36 @@ class C(QMainWindow):
         c=Card("Flex Hardware Recommendations");self.rec=QLabel();self.rec.setWordWrap(True);c.l.addWidget(self.rec);l.addWidget(c)
         c=Card("Hızlı İşlemler");r=QHBoxLayout();r.addWidget(self.btn("Flex Doctor",self.doctor));r.addWidget(self.btn("Sistem Raporu",self.report));r.addWidget(self.btn("KDE Sistem Ayarları",lambda:QProcess.startDetached("systemsettings")));c.l.addLayout(r);l.addWidget(c);l.addStretch();return p
     def updates(self):
-        p,l=self.page("Flex Update Center","Güncellemeleri kontrol et; Btrfs/Snapper hazırsa işlem öncesi snapshot otomatik alınır.")
-        c,self.ub=self.textcard("Bekleyen Güncellemeler",update_preview);l.addWidget(c);r=QHBoxLayout();r.addWidget(self.btn("Kontrol Et",lambda:self.ub.setPlainText(update_preview())));r.addWidget(self.btn("APT Yenile",lambda:self.admin(["update","refresh"],"APT",lambda:self.ub.setPlainText(update_preview()))));r.addWidget(self.btn("Tümünü Güncelle",lambda:self.admin(["update","install"],"Flex Update",lambda:self.ub.setPlainText(update_preview())),True));l.addLayout(r);l.addStretch();return p
+        p,l=self.page("Flex Update Center","Debian paketleri ile FlexOS'a ait bileşenleri ayrı ayrı ve güvenli şekilde güncelle.")
+        c,self.cub=self.textcard("FlexOS Bileşenleri",lambda:"Henüz kontrol edilmedi. İnternet bağlantısı olduğunda Kontrol Et düğmesini kullanın.");l.addWidget(c)
+        r=QHBoxLayout()
+        r.addWidget(self.btn("FlexOS Güncellemesini Kontrol Et",lambda:self.cub.setPlainText(self.component_status())))
+        r.addWidget(self.btn("FlexOS Bileşenlerini Güncelle",self.component_update,True))
+        l.addLayout(r)
+
+        c,self.ub=self.textcard("Debian / APT Güncellemeleri",update_preview);l.addWidget(c)
+        r=QHBoxLayout()
+        r.addWidget(self.btn("Kontrol Et",lambda:self.ub.setPlainText(update_preview())))
+        r.addWidget(self.btn("APT Yenile",lambda:self.admin(["update","refresh"],"APT Paket İndeksi",lambda:self.ub.setPlainText(update_preview()))))
+        r.addWidget(self.btn("Tüm Sistem Paketlerini Güncelle",lambda:self.admin(["update","install"],"Flex Update",lambda:self.ub.setPlainText(update_preview())),True))
+        l.addLayout(r)
+        c=Card("Beta Update Safety","Btrfs + Snapper hazırsa FlexOS; sistem, sürücü ve FlexOS bileşen güncellemelerinden önce otomatik snapshot almaya çalışır.")
+        l.addWidget(c)
+        c=Card("FlexOS Signed APT Repository","GitHub Pages üzerinde imzalı beta deposu yayınlandığında etkinleştirilebilir. Normal Debian paketleri yine Debian'dan gelir.")
+        r=QHBoxLayout()
+        r.addWidget(self.btn("FlexOS Repo'yu Etkinleştir",lambda:self.admin(["repo","enable"],"FlexOS APT Repo")))
+        r.addWidget(self.btn("FlexOS Repo'yu Devre Dışı Bırak",lambda:self.admin(["repo","disable"],"FlexOS APT Repo")))
+        c.l.addLayout(r);l.addWidget(c)
+        l.addStretch();return p
     def drivers(self):
-        p,l=self.page("Flex Driver Manager","GPU sürücülerini algılar. NVIDIA proprietary sürücüsü yalnızca isteğe bağlı kurulur.");c,self.db=self.textcard("Sürücü Durumu",driver_status);l.addWidget(c)
-        c=Card("NVIDIA","Debian non-free nvidia-driver + headers kurulur; reboot gerekir.");c.l.addWidget(self.btn("Önerilen NVIDIA Sürücüsünü Kur",lambda:self.confirm("NVIDIA sürücüsü kurulacak. Devam?",["driver","nvidia"],"NVIDIA",lambda:self.db.setPlainText(driver_status()))));l.addWidget(c);l.addStretch();return p
+        p,l=self.page("Flex Driver Manager","GPU sürücülerini algılar. NVIDIA proprietary sürücüsü isteğe bağlıdır ve Recovery'den geri alınabilir.");c,self.db=self.textcard("Sürücü Durumu",driver_status);l.addWidget(c)
+        c=Card("NVIDIA Driver","Kurulumdan önce mümkünse snapshot alınır. İşlem sonrasında reboot gerekir.")
+        r=QHBoxLayout()
+        r.addWidget(self.btn("Önerilen NVIDIA Sürücüsünü Kur",lambda:self.confirm("NVIDIA proprietary sürücüsü kurulacak. Devam?",["driver","nvidia"],"NVIDIA Kurulumu",lambda:self.db.setPlainText(driver_status()))))
+        r.addWidget(self.btn("NVIDIA Proprietary Sürücüsünü Kaldır",lambda:self.confirm("NVIDIA proprietary paketleri kaldırılıp initramfs yeniden oluşturulacak. Devam?",["driver","nvidia-remove"],"NVIDIA Recovery",lambda:self.db.setPlainText(driver_status()))))
+        c.l.addLayout(r);l.addWidget(c)
+        c=Card("Black-screen Recovery","Sürücü değişikliğinden sonra grafik arayüz açılmazsa GRUB > FlexOS Recovery (Safe Graphics) yolunu kullanabilirsiniz.")
+        l.addWidget(c);l.addStretch();return p
     def snapshots(self):
         p,l=self.page("Flex Snapshot","Btrfs üzerinde Snapper ile snapshot ve rollback.");c=Card("Durum");self.sl=QLabel(snapshot_status());self.sl.setWordWrap(True);c.l.addWidget(self.sl);l.addWidget(c)
         r=QHBoxLayout();r.addWidget(self.btn("Hazırla",lambda:self.admin(["snapshot","setup"],"Snapshot setup",self.rsnap)));r.addWidget(self.btn("Snapshot Oluştur",lambda:self.admin(["snapshot","create","FlexOS manual snapshot"],"Snapshot",self.rsnap)));r.addWidget(self.btn("Listele",lambda:self.admin(["snapshot","list"],"Snapshot listesi")));l.addLayout(r)
@@ -88,6 +206,25 @@ class C(QMainWindow):
         self.pc.setCurrentIndex(max(0,self.pc.findData(current_profile())));c.l.addWidget(self.pc);c.l.addWidget(self.btn("Profili Uygula",self.profile));l.addWidget(c)
         c=Card("zRAM");r=QHBoxLayout();r.addWidget(self.btn("Aç",lambda:self.admin(["performance","zram","on"],"zRAM")));r.addWidget(self.btn("Kapat",lambda:self.admin(["performance","zram","off"],"zRAM")));c.l.addLayout(r);l.addWidget(c)
         c=Card("Swappiness");self.sw=QComboBox();self.sw.addItems(["10","30","60","80"]);c.l.addWidget(self.sw);c.l.addWidget(self.btn("Uygula",lambda:self.admin(["performance","swappiness",self.sw.currentText()],"Swappiness")));l.addWidget(c);l.addStretch();return p
+    def packageprofiles(self):
+        p,l=self.page("Flex Package Profiles","KDE Plasma tabanını değiştirmeden kullanım amacınıza göre ek araç grupları kur.")
+        g=QGridLayout()
+        for i,(name,info) in enumerate(package_profiles().items()):
+            c=Card(info.get("name",name),info.get("description",""))
+            c.l.addWidget(self.btn("Profili Uygula",lambda _=False,n=name:self.run_task(
+                f"{n.title()} Paket Profili",
+                "pkexec",
+                ["/usr/lib/flexos/flex-package-profile-install","--strict",n],
+                cancellable=False
+            )))
+            g.addWidget(c,i//2,i%2)
+        l.addLayout(g)
+        pending=Path("/etc/flexos/package-profile-pending")
+        if pending.exists():
+            q=QLabel("Kurulum sırasında tamamlanamayan profil: "+pending.read_text(errors="ignore").strip())
+            q.setObjectName("muted");l.addWidget(q)
+        l.addStretch();return p
+
     def apps(self):
         p,l=self.page("Flex App Installer","APT veya Flatpak/Flathub üzerinden uygulamalar.");g=QGridLayout()
         for i,a in enumerate(app_catalog()):
@@ -102,7 +239,7 @@ class C(QMainWindow):
         c=Card("Quiet Splash");r=QHBoxLayout();r.addWidget(self.btn("Aç",lambda:self.admin(["boot","quiet","on"],"Boot")));r.addWidget(self.btn("Kapat",lambda:self.admin(["boot","quiet","off"],"Boot")));c.l.addLayout(r);l.addWidget(c)
         c=Card("Debian Backports Kernel");c.l.addWidget(self.btn("Backports Kernel Kur",lambda:self.confirm("Yeni kernel kurulacak. Devam?",["kernel","backports"],"Kernel",lambda:self.kb.setPlainText(kernel_status()))));l.addWidget(c);l.addStretch();return p
     def recovery(self):
-        p,l=self.page("Flex Recovery","Terminal kullanmadan temel onarım işlemleri.");g=QGridLayout();acts=[("DPKG Onar",["repair","dpkg"]),("Bozuk Paketleri Onar",["repair","packages"]),("APT İndeksini Onar",["repair","apt"]),("initramfs Yenile",["repair","initramfs"]),("GRUB Yenile",["repair","grub"]),("Ağı Yeniden Başlat",["repair","network"])]
+        p,l=self.page("Flex Recovery","Masaüstünden onarım araçları. Grafik oturum açılmazsa GRUB menüsündeki FlexOS Recovery aynı temel araçları TTY üzerinden sunar.");g=QGridLayout();acts=[("DPKG Onar",["repair","dpkg"]),("Bozuk Paketleri Onar",["repair","packages"]),("APT İndeksini Onar",["repair","apt"]),("initramfs Yenile",["repair","initramfs"]),("GRUB Yenile",["repair","grub"]),("Ağı Yeniden Başlat",["repair","network"])]
         for i,(n,a) in enumerate(acts):g.addWidget(self.btn(n,lambda _=False,x=a,y=n:self.admin(x,y)),i//2,i%2)
         l.addLayout(g);c=Card("KDE Ayarlarını Sıfırla","Temel Plasma/KWin dosyaları önce yedeklenir.");c.l.addWidget(self.btn("KDE Ayarlarını Sıfırla",self.resetkde));l.addWidget(c);l.addStretch();return p
     def logs(self):
@@ -121,8 +258,35 @@ class C(QMainWindow):
         c=Card("Otomatik Güvenlik Güncellemeleri");r=QHBoxLayout();r.addWidget(self.btn("Aç",lambda:self.admin(["security","autoupdates","on"],"Security updates",self.rsec)));r.addWidget(self.btn("Kapat",lambda:self.admin(["security","autoupdates","off"],"Security updates",self.rsec)));c.l.addLayout(r);l.addWidget(c);l.addStretch();return p
     def hardware(self):
         p,l=self.page("Donanım","CPU, GPU, RAM, ağ ve sensörler.");c=Card("Donanım");self.hb=QTextEdit();self.hb.setReadOnly(True);self.hb.setPlainText(hardware_text());c.l.addWidget(self.hb);l.addWidget(c);c=Card("Sensörler");self.tb=QTextEdit();self.tb.setReadOnly(True);self.tb.setPlainText(temperature_text());c.l.addWidget(self.tb);l.addWidget(c);l.addWidget(self.btn("Yenile",lambda:(self.hb.setPlainText(hardware_text()),self.tb.setPlainText(temperature_text()))));return p
+    def betaqa(self):
+        p,l=self.page("Beta QA","Bu sayfa yalnızca kurulu sistemin yerel beta kontrollerini çalıştırır; gerçek donanım ve installer test matrisi ayrıca GitHub kaynağında tutulur.")
+        c=Card("Installed-System Check")
+        self.qabox=QTextEdit();self.qabox.setReadOnly(True);self.qabox.setPlainText(self.beta_check_text());c.l.addWidget(self.qabox);l.addWidget(c)
+        r=QHBoxLayout()
+        r.addWidget(self.btn("Kontrolü Yeniden Çalıştır",lambda:self.qabox.setPlainText(self.beta_check_text())))
+        r.addWidget(self.btn("Sistem Raporu Oluştur",self.report))
+        c=Card("QA Araçları","`flex beta-check` aynı kontrolü terminalden çalıştırır. Public beta etiketi, kaynak repodaki zorunlu QA matrisi tamamlanmadan CI tarafından engellenir.")
+        c.l.addLayout(r);l.addWidget(c);l.addStretch();return p
+
     def about(self):
-        p,l=self.page("Hakkında","FlexOS dağıtım kimliği.");c=Card("FlexOS");q=QLabel("<b>FlexOS 0.1 Alpha</b><br><br>Created by <b>Pifo</b><br>Base: Debian 13 (Trixie)<br>Desktop: KDE Plasma 6<br><br>Clean. Flexible. Yours.");q.setWordWrap(True);c.l.addWidget(q);l.addWidget(c);l.addStretch();return p
+        p,l=self.page("Hakkında","FlexOS dağıtım kimliği.");c=Card("FlexOS");q=QLabel("<b>FlexOS 0.5 Beta Preview</b><br><br>Created by <b>Pifo</b><br>Base: Debian 13 (Trixie)<br>Desktop: KDE Plasma 6<br><br>Clean. Flexible. Yours.");q.setWordWrap(True);c.l.addWidget(q);l.addWidget(c);l.addStretch();return p
+
+    def beta_check_text(self):
+        try:
+            p=subprocess.run(["/usr/bin/flex-beta-check"],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=20)
+            return p.stdout.strip() or f"flex-beta-check çıktı üretmedi (kod {p.returncode})."
+        except Exception as e:
+            return f"Beta QA kontrolü çalıştırılamadı: {e}"
+
+    def component_status(self):
+        try:
+            p=subprocess.run(["/usr/bin/flex-self-update","check"],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
+            return p.stdout.strip() or f"Kontrol tamamlandı (kod {p.returncode})."
+        except Exception as e:
+            return f"FlexOS bileşen güncellemesi kontrol edilemedi: {e}"
+
+    def component_update(self):
+        self.run_task("FlexOS Bileşen Güncellemesi","/usr/bin/flex-self-update",["install"],lambda:self.cub.setPlainText(self.component_status()),cancellable=False)
 
     def metrics(self):
         try:v=list(map(int,Path("/proc/stat").read_text().splitlines()[0].split()[1:]));idle=v[3]+v[4];tot=sum(v);cpu=0 if not self.prev else 100*(1-(idle-self.prev[0])/(tot-self.prev[1] or 1));self.prev=(idle,tot)
@@ -137,11 +301,22 @@ class C(QMainWindow):
     def rsnap(self):self.sl.setText(snapshot_status())
     def rsec(self):self.sb.setPlainText(security_status())
     def profile(self):
-        subprocess.run(["pkexec","/usr/bin/flex","profile","set",self.pc.currentData()])
+        self.run_task(
+            "Flex Profile",
+            "pkexec",
+            ["/usr/bin/flex","profile","set",self.pc.currentData()],
+            cancellable=False
+        )
     def install(self,a):
         if a["method"]=="flatpak":
-            rc,o=install_flatpak_user(a["package"]);QMessageBox.information(self,"Flex App Installer",o[-2500:] or ("Kuruldu." if rc==0 else "Kurulamadı."))
-        else:self.admin(["app","apt",a["package"]],a["name"])
+            cmd=(
+                "flatpak remote-add --user --if-not-exists flathub "
+                "https://flathub.org/repo/flathub.flatpakrepo && "
+                f"flatpak install --user -y flathub {a['package']}"
+            )
+            self.run_task(a["name"],"bash",["-lc",cmd],cancellable=True)
+        else:
+            self.admin(["app","apt",a["package"]],a["name"])
     def delsnap(self):
         n,ok=QInputDialog.getText(self,"Snapshot Sil","Snapshot ID:")
         if ok and n.isdigit():self.admin(["snapshot","delete",n],"Snapshot silme",self.rsnap)

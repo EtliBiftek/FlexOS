@@ -1,6 +1,22 @@
 #!/bin/sh
+set -u
+
 [ "$(findmnt -n -o FSTYPE / 2>/dev/null)" = "btrfs" ] || exit 0
 [ -f /etc/snapper/configs/root ] || exit 0
 command -v snapper >/dev/null 2>&1 || exit 0
+
+# Avoid making several snapshots within the same minute when one high-level
+# FlexOS operation invokes dpkg multiple times.
+stamp=/run/flexos-last-package-snapshot
+now="$(date +%s)"
+last=0
+[ -r "$stamp" ] && last="$(cat "$stamp" 2>/dev/null || printf 0)"
+case "$last" in *[!0-9]*|"") last=0 ;; esac
+
+if [ $((now-last)) -lt 60 ]; then
+    exit 0
+fi
+
+printf '%s\n' "$now" > "$stamp" 2>/dev/null || true
 snapper -c root create --description "Before package transaction" >/dev/null 2>&1 || true
 exit 0

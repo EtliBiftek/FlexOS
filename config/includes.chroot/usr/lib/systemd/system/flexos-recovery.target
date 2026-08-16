@@ -1,0 +1,6 @@
+[Unit]
+Description=FlexOS Recovery Environment
+Requires=multi-user.target
+After=multi-user.target
+Wants=flexos-recovery.service
+AllowIsolate=yes

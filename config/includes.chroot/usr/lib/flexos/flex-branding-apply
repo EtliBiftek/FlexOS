@@ -1,0 +1,17 @@
+#!/bin/sh
+set -u
+
+src=/usr/share/icons/hicolor/scalable/apps/flexos-logo.svg
+
+if [ -f "$src" ]; then
+    for dst in \
+      /usr/share/icons/hicolor/scalable/apps/distributor-logo.svg \
+      /usr/share/icons/hicolor/scalable/apps/start-here.svg \
+      /usr/share/icons/hicolor/scalable/apps/system-logo.svg
+    do
+        install -m 0644 "$src" "$dst" 2>/dev/null || true
+    done
+fi
+
+command -v update-icon-caches >/dev/null 2>&1 && update-icon-caches /usr/share/icons/hicolor >/dev/null 2>&1 || true
+exit 0

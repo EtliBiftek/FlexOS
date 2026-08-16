@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import argparse,json,subprocess
+from pathlib import Path
+
+ap=argparse.ArgumentParser(description="Verify an installed FlexOS beta system.")
+ap.add_argument("--json",action="store_true")
+args=ap.parse_args()
+
+checks=[]
+def add(name,state,detail=""):
+    checks.append({"name":name,"state":state,"detail":detail})
+
+live="boot=live" in Path("/proc/cmdline").read_text(errors="ignore")
+
+osid=""
+try:
+    for line in Path("/etc/os-release").read_text().splitlines():
+        if line.startswith("ID="):osid=line.split("=",1)[1].strip().strip('"')
+except Exception:pass
+add("FlexOS identity","PASS" if osid=="flexos" else "FAIL",osid or "missing")
+
+add("KDE Plasma session","PASS" if (Path("/usr/share/wayland-sessions/plasma.desktop").exists() or Path("/usr/share/xsessions/plasma.desktop").exists()) else "FAIL")
+
+sddm=Path("/etc/sddm.conf.d/10-flexos.conf")
+autologin_live=False
+if sddm.exists():
+    text=sddm.read_text(errors="ignore")
+    autologin_live="[Autologin]" in text and "User=flex" in text
+if live:
+    add("Live autologin","PASS" if autologin_live else "WARN","Expected in live session.")
+else:
+    add("No live-user autologin","FAIL" if autologin_live else "PASS")
+
+for binary in ("flex","flex-center","flex-welcome","flex-self-update"):
+    add(binary,"PASS" if Path("/usr/bin",binary).exists() else "FAIL")
+
+cfg=Path("/boot/grub/grub.cfg")
+if cfg.exists():
+    text=cfg.read_text(errors="ignore")
+    add("GRUB recovery entries","PASS" if "FlexOS Recovery" in text else "FAIL")
+else:
+    add("GRUB recovery entries","WARN","/boot/grub/grub.cfg not readable or not generated.")
+
+def systemctl(*a):
+    p=subprocess.run(["systemctl",*a],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    return p.returncode,p.stdout.strip()
+
+for unit in ("sddm.service","NetworkManager.service"):
+    rc,out=systemctl("is-enabled",unit)
+    add(f"{unit} enabled","PASS" if rc==0 else "FAIL",out)
+
+rc,out=systemctl("--failed","--no-legend")
+failed=[x for x in out.splitlines() if x.strip()]
+add("Failed systemd units","PASS" if not failed else "WARN",f"{len(failed)} failed unit(s)")
+
+p=subprocess.run(["findmnt","-n","-o","FSTYPE","/"],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+fs=p.stdout.strip()
+add("Root filesystem","PASS",fs or "unknown")
+if fs=="btrfs":
+    q=subprocess.run(["findmnt","-n","-o","FSROOT","/"],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    fsroot=q.stdout.strip()
+    add("Btrfs root subvolume","PASS" if fsroot not in ("","/") else "FAIL",fsroot or "top-level")
+    add("Btrfs Snapper config","PASS" if Path("/etc/snapper/configs/root").exists() else "FAIL")
+
+add("Install metadata","PASS" if Path("/etc/flexos/install-info").exists() or live else "WARN")
+
+fails=[c for c in checks if c["state"]=="FAIL"]
+if args.json:
+    print(json.dumps({"live":live,"checks":checks,"ok":not fails},ensure_ascii=False,indent=2))
+else:
+    for c in checks:
+        detail=f" — {c['detail']}" if c["detail"] else ""
+        print(f"[{c['state']}] {c['name']}{detail}")
+    print(f"\nResult: {'PASS' if not fails else 'FAIL'} ({len(fails)} critical failure(s))")
+
+raise SystemExit(1 if fails else 0)

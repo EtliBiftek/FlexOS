@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import sys
-sys.path.insert(0, "/usr/lib/flexos")
-from flexlib import apply_profile, current_profile
-try:
-    apply_profile(current_profile())
-except Exception as e:
-    print(f"FlexOS profile apply warning: {e}", file=sys.stderr)
+sys.path.insert(0,"/usr/lib/flexos")
+from flexlib import apply_profile,current_profile
+try:apply_profile(current_profile())
+except Exception as e:print(f"FlexOS profile apply warning: {e}",file=sys.stderr)

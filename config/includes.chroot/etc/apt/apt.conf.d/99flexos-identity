@@ -1,2 +1,4 @@
-// Restore the FlexOS distribution identity after packages such as base-files update.
-DPkg::Post-Invoke { "/usr/lib/flexos/flex-identity-apply || true"; };
+DPkg::Post-Invoke {
+  "if [ -x /usr/lib/flexos/flex-identity-apply ]; then /usr/lib/flexos/flex-identity-apply >/dev/null 2>&1 || true; fi";
+  "if [ -x /usr/lib/flexos/flex-branding-apply ]; then /usr/lib/flexos/flex-branding-apply >/dev/null 2>&1 || true; fi";
+};

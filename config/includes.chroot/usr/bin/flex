@@ -1,20 +1,46 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 import argparse,json,os,subprocess,sys
 sys.path.insert(0,"/usr/lib/flexos")
-from flexsuite import *
-from flexlib import FLEX_PROFILES,apply_profile,current_profile,identity,doctor
-p=argparse.ArgumentParser(prog="flex");s=p.add_subparsers(dest="cmd",required=True)
-for n in ("info","doctor","recommend","security","drivers","updates","snapshots","kernel","center","welcome","report"):s.add_parser(n)
-h=s.add_parser("hardware");h.add_argument("--json",action="store_true")
-pr=s.add_parser("profile");pr.add_argument("action",choices=["list","show","set"]);pr.add_argument("name",nargs="?")
+from flexsuite import (
+    hardware,hardware_text,recommendations,security_status,driver_status,
+    update_preview,snapshot_status,kernel_status,flexos_package_status,identity
+)
+from flexlib import FLEX_PROFILES,apply_profile,current_profile,doctor
+
+def require_root():
+    if os.geteuid()!=0:
+        raise SystemExit("This action requires administrator privileges. Run with sudo.")
+
+def call(cmd):
+    raise SystemExit(subprocess.run(cmd).returncode)
+
+p=argparse.ArgumentParser(prog="flex",description="FlexOS system command")
+sp=p.add_subparsers(dest="cmd",required=True)
+for n in ("info","doctor","recommend","security","drivers","updates","snapshots","kernel","center","welcome","report","beta-check"):
+    sp.add_parser(n)
+h=sp.add_parser("hardware");h.add_argument("--json",action="store_true")
+pr=sp.add_parser("profile");pr.add_argument("action",choices=["list","show","set"]);pr.add_argument("name",nargs="?")
+co=sp.add_parser("components");co.add_argument("action",choices=["check","install"])
+rp=sp.add_parser("repo");rp.add_argument("action",choices=["enable","disable"])
+dr=sp.add_parser("driver");dr.add_argument("action",choices=["install-nvidia","remove-nvidia"])
 a=p.parse_args()
+
 if a.cmd=="info":
-    i=identity();print(f"FlexOS {i.get('version','0.1 Alpha')}\nCreator: Pifo\nDesktop: KDE Plasma\nKernel: {os.uname().release}\nProfile: {current_profile()}")
-elif a.cmd=="hardware":print(json.dumps(hardware(),ensure_ascii=False,indent=2) if a.json else hardware_text())
+    i=identity()
+    print(f"FlexOS {i.get('version','unknown')}")
+    print(f"Build: {i.get('build_id','unknown')}")
+    print(f"Channel: {i.get('channel','unknown')}")
+    print("Creator: Pifo")
+    print("Desktop: KDE Plasma 6")
+    print(f"Kernel: {os.uname().release}")
+    print(f"Flex Profile: {current_profile()}")
+elif a.cmd=="hardware":
+    print(json.dumps(hardware(),ensure_ascii=False,indent=2) if a.json else hardware_text())
 elif a.cmd=="doctor":
-    for x,y in doctor():print(f"[{x}] {y}")
+    for s,m in doctor():print(f"[{s}] {m}")
 elif a.cmd=="recommend":
-    for x,y in recommendations():print(f"[{x}] {y}")
+    for s,m in recommendations():print(f"[{s}] {m}")
 elif a.cmd=="security":print(security_status())
 elif a.cmd=="drivers":print(driver_status())
 elif a.cmd=="updates":print(update_preview())
@@ -23,11 +49,22 @@ elif a.cmd=="kernel":print(kernel_status())
 elif a.cmd=="profile":
     if a.action=="list":
         for n,v in FLEX_PROFILES.items():print(f"{n:12} {v['description']}")
-    elif a.action=="show":print(current_profile())
+    elif a.action=="show":
+        print(current_profile())
     else:
-        if os.geteuid()!=0:raise SystemExit("Run with sudo.")
+        require_root()
         if not a.name:p.error("profile set requires name")
         print(apply_profile(a.name))
-elif a.cmd=="center":raise SystemExit(subprocess.run(["flex-center"]).returncode)
-elif a.cmd=="welcome":raise SystemExit(subprocess.run(["flex-welcome"]).returncode)
-elif a.cmd=="report":raise SystemExit(subprocess.run(["flex-system-report"]).returncode)
+elif a.cmd=="components":
+    call(["/usr/bin/flex-self-update",a.action])
+elif a.cmd=="repo":
+    require_root()
+    call(["/usr/lib/flexos/flex-admin","repo",a.action])
+elif a.cmd=="driver":
+    require_root()
+    action="nvidia" if a.action=="install-nvidia" else "nvidia-remove"
+    call(["/usr/lib/flexos/flex-admin","driver",action])
+elif a.cmd=="center":call(["flex-center"])
+elif a.cmd=="welcome":call(["flex-welcome"])
+elif a.cmd=="report":call(["flex-system-report"])
+elif a.cmd=="beta-check":call(["flex-beta-check"])

@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Flex Recovery
+Name[tr]=Flex Recovery
 Comment=Repair and recover FlexOS
+Comment[tr]=FlexOS onarım araçlarını aç
 Exec=flex-center --page recovery
 Icon=flexos-logo
 Terminal=false

@@ -1,9 +1,11 @@
 {
   "name": "FlexOS",
-  "version": "0.1 Alpha",
-  "build_id": "0.1.0-alpha.1",
+  "version": "0.5 Beta Preview",
+  "build_id": "0.5.0-beta.1-dev",
+  "channel": "beta-development",
   "creator": "Pifo",
   "base": "Debian 13 (Trixie)",
+  "desktop": "KDE Plasma 6",
   "project": "https://github.com/EtliBiftek/FlexOS",
   "support": "https://github.com/EtliBiftek/FlexOS/issues"
 }

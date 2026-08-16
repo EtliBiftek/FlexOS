@@ -1,11 +1,13 @@
 [Unit]
 Description=Apply FlexOS distribution identity
 After=local-fs.target
-Before=display-manager.service
+ConditionPathExists=/usr/lib/flexos/flex-identity-apply
+
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/flexos/flex-identity-apply
 TimeoutStartSec=5s
 RemainAfterExit=yes
+
 [Install]
 WantedBy=multi-user.target
