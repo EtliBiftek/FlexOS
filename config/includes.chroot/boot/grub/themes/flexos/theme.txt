@@ -1,7 +1,6 @@
 title-text: "FlexOS"
 title-color: "#d5d7da"
 desktop-color: "#101113"
-terminal-box: "0 0 0 0"
 terminal-border: "0"
 + boot_menu {
   left = 20%
