@@ -1,66 +1,110 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+LOG="${HOME}/Desktop/FlexOS-Installer.log"
+FSTAB_MOVED=0
+XHOST_GRANTED=0
+
+mkdir -p "$(dirname "$LOG")"
+: > "$LOG"
+
+log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"
+}
+
 show_error() {
+    local message="$1"
+    log "ERROR: $message"
+
     if command -v kdialog >/dev/null 2>&1; then
-        kdialog --title "FlexOS Installer" --error "$1"
-    else
-        notify-send "FlexOS Installer" "$1" 2>/dev/null || true
+        kdialog --title "FlexOS Installer" --error "$(printf '%s\n\nDiagnostic log:\n%s' "$message" "$LOG")" || true
+    elif command -v notify-send >/dev/null 2>&1; then
+        notify-send -u critical "FlexOS Installer" "$message" || true
+    fi
+
+    if command -v kate >/dev/null 2>&1; then
+        kate "$LOG" >/dev/null 2>&1 &
     fi
 }
 
-# Installer sadece Live ISO'da çalışsın.
+cleanup() {
+    if [[ "$XHOST_GRANTED" == "1" ]]; then
+        xhost -si:localuser:root >> "$LOG" 2>&1 || true
+    fi
+
+    if [[ "$FSTAB_MOVED" == "1" && -e /etc/fstab.orig.calamares ]]; then
+        sudo -n mv /etc/fstab.orig.calamares /etc/fstab >> "$LOG" 2>&1 || true
+    fi
+}
+
+trap cleanup EXIT
+
+log "FlexOS Installer launcher started"
+log "Session: ${XDG_SESSION_TYPE:-unknown}"
+log "DISPLAY: ${DISPLAY:-unset}"
+log "WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-unset}"
+
 if ! grep -qw 'boot=live' /proc/cmdline 2>/dev/null; then
     show_error "FlexOS Installer can only be started from the live environment."
     exit 1
 fi
 
 if ! command -v calamares >/dev/null 2>&1; then
-    show_error "Calamares is not installed."
+    show_error "Calamares is not installed in this live image."
     exit 1
 fi
 
-# Debian Live kullanıcısının parola gerektirmeyen sudo erişimini kullan.
-if ! sudo -n true 2>/dev/null; then
-    show_error "Administrator privileges could not be obtained."
+if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true >> "$LOG" 2>&1; then
+    show_error "Administrator privileges could not be obtained automatically."
     exit 1
 fi
 
-# Debian Calamares'ın yaptığı fstab workaround'u.
-FSTAB_MOVED=0
-
+# Debian live-build can leave an fstab behind which confuses partitioning.
 if [[ -e /etc/fstab && ! -e /etc/fstab.orig.calamares ]]; then
-    if sudo -n mv /etc/fstab /etc/fstab.orig.calamares; then
+    if sudo -n mv /etc/fstab /etc/fstab.orig.calamares >> "$LOG" 2>&1; then
         FSTAB_MOVED=1
+        log "Moved live fstab out of the way"
+    else
+        show_error "The live filesystem could not be prepared for installation."
+        exit 1
     fi
 fi
 
-cleanup() {
-    if [[ "$FSTAB_MOVED" == "1" && -e /etc/fstab.orig.calamares ]]; then
-        sudo -n mv /etc/fstab.orig.calamares /etc/fstab 2>/dev/null || true
-    fi
-
-    if [[ -n "${DISPLAY:-}" ]]; then
-        xhost -si:localuser:root >/dev/null 2>&1 || true
-    fi
-}
-
-trap cleanup EXIT
-
-export QT_AUTO_SCREEN_SCALE_FACTOR=1
-
-# Plasma Wayland altında Calamares'ı XWayland üzerinden güvenilir şekilde aç.
-if [[ -n "${DISPLAY:-}" ]]; then
-    xhost +si:localuser:root >/dev/null 2>&1 || true
-
-    sudo -n env \
-        DISPLAY="$DISPLAY" \
-        XAUTHORITY="${XAUTHORITY:-}" \
-        QT_QPA_PLATFORM=xcb \
-        QT_AUTO_SCREEN_SCALE_FACTOR=1 \
-        /usr/bin/calamares "$@"
-else
-    sudo -n env \
-        QT_AUTO_SCREEN_SCALE_FACTOR=1 \
-        /usr/bin/calamares "$@"
+# Debian's launcher runs privileged Calamares through XWayland.
+if [[ -z "${DISPLAY:-}" ]]; then
+    show_error "XWayland is not available in this live session (DISPLAY is unset)."
+    exit 1
 fi
+
+if ! xhost +si:localuser:root >> "$LOG" 2>&1; then
+    show_error "The installer could not obtain access to the graphical session."
+    exit 1
+fi
+XHOST_GRANTED=1
+
+log "Starting Calamares in debug mode with software rendering"
+
+set +e
+sudo -n env -i \
+    HOME=/root \
+    USER=root \
+    LOGNAME=root \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    DISPLAY="$DISPLAY" \
+    LANG="${LANG:-C.UTF-8}" \
+    QT_QPA_PLATFORM=xcb \
+    QT_AUTO_SCREEN_SCALE_FACTOR=1 \
+    QT_QUICK_BACKEND=software \
+    LIBGL_ALWAYS_SOFTWARE=1 \
+    /usr/bin/calamares -d "$@" >> "$LOG" 2>&1
+rc=$?
+set -e
+
+log "Calamares exited with status $rc"
+
+if [[ "$rc" -ne 0 ]]; then
+    show_error "FlexOS Installer failed to start correctly. The diagnostic log will now open automatically."
+    exit "$rc"
+fi
+
+exit 0

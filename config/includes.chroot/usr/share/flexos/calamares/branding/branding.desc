@@ -1,5 +1,10 @@
 ---
 componentName: debian
+welcomeStyleCalamares: false
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 900px,600px
+windowPlacement: center
 
 strings:
     productName:         FlexOS
@@ -13,16 +18,18 @@ strings:
     supportUrl:          https://github.com/EtliBiftek/FlexOS/issues
     knownIssuesUrl:      https://github.com/EtliBiftek/FlexOS/issues
     releaseNotesUrl:     https://github.com/EtliBiftek/FlexOS/releases
+    donateUrl:           ""
+
+sidebar: widget
+navigation: widget
 
 images:
-    productLogo:    flexos-logo.svg
-    productIcon:    flexos-logo.svg
-    productWelcome: welcome.svg
+    productLogo:    "flexos-logo.svg"
+    productIcon:    "flexos-logo.svg"
+    productWelcome: "welcome.svg"
 
 style:
-    sidebarBackground:    "#151619"
-    sidebarText:          "#aeb0b4"
-    sidebarTextSelect:    "#ffffff"
-    sidebarTextHighlight: "#777a80"
-
-windowExpanding: normal
+    SidebarBackground:        "#151619"
+    SidebarText:              "#aeb0b4"
+    SidebarTextCurrent:       "#ffffff"
+    SidebarBackgroundCurrent: "#777a80"
