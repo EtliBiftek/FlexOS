@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 import argparse, json, os, subprocess, sys
-from pathlib import Path
 sys.path.insert(0, "/usr/lib/flexos")
-from flexlib import (
-    FLEX_PROFILES, apply_profile, current_profile, current_desktop_profile,
-    desktop_profiles, doctor, hardware, hardware_text, identity, package_profiles
-)
+from flexlib import FLEX_PROFILES, apply_profile, current_profile, doctor, hardware, hardware_text, identity, package_profiles
 
 def require_root():
     if os.geteuid() != 0:
@@ -13,94 +9,61 @@ def require_root():
         raise SystemExit(1)
 
 def run_live(cmd):
-    p = subprocess.run(cmd)
-    raise SystemExit(p.returncode)
+    raise SystemExit(subprocess.run(cmd).returncode)
 
 def cmd_info(_):
     i = identity()
     print(f"{i.get('name','FlexOS')} {i.get('version','')}")
     print(f"Creator: {i.get('creator','Pifo')}")
-    print(f"Base: {i.get('base','Debian')}")
+    print(f"Base: {i.get('base','Debian 13')}")
     print(f"Kernel: {os.uname().release}")
+    print("Desktop: KDE Plasma")
     print(f"Flex Profile: {current_profile()}")
-    print(f"Desktop Profile: {current_desktop_profile()}")
     print(f"Project: {i.get('project','')}")
 
 def cmd_hardware(args):
     print(json.dumps(hardware(), indent=2, ensure_ascii=False) if args.json else hardware_text())
 
 def cmd_doctor(_):
-    for state, message in doctor():
-        print(f"[{state}] {message}")
+    for state, message in doctor(): print(f"[{state}] {message}")
 
 def cmd_profile(args):
     if args.action == "list":
-        for n, v in FLEX_PROFILES.items():
-            print(f"{n:12} {v['description']}")
-    elif args.action == "show":
-        print(current_profile())
+        for n, v in FLEX_PROFILES.items(): print(f"{n:12} {v['description']}")
+    elif args.action == "show": print(current_profile())
     elif args.action == "set":
-        require_root()
-        result = apply_profile(args.name)
-        print(f"Flex Profile set to {args.name} ({result}).")
+        require_root(); result = apply_profile(args.name); print(f"Flex Profile set to {args.name} ({result}).")
 
 def cmd_package_profile(args):
     profiles = package_profiles()
     if args.action == "list":
-        for key, p in profiles.items():
-            print(f"{key:12} {p.get('description','')}")
+        for key, p in profiles.items(): print(f"{key:12} {p.get('description','')}")
         return
-    require_root()
-    run_live(["/usr/lib/flexos/flex-package-profile-install", args.name])
+    require_root(); run_live(["/usr/lib/flexos/flex-package-profile-install", args.name])
 
-def cmd_desktop(args):
-    profiles = desktop_profiles()
-    if args.action == "list":
-        for key, p in profiles.items():
-            print(f"{key:12} {p.get('status',''):20} {p.get('name','')}")
-    elif args.action == "status":
-        print(current_desktop_profile())
-        status = Path("/etc/flexos/desktop-profile-status")
-        if status.exists():
-            print(status.read_text().strip())
-    elif args.action == "install":
-        require_root()
-        run_live(["/usr/lib/flexos/flex-desktop-install", args.name])
-
+def cmd_refresh(_): require_root(); run_live(["apt-get", "update"])
 def cmd_update(_):
     require_root()
     p = subprocess.run(["apt-get", "update"])
-    if p.returncode:
-        raise SystemExit(p.returncode)
-    raise SystemExit(subprocess.run(["apt-get", "dist-upgrade", "-y"]).returncode)
+    if p.returncode: raise SystemExit(p.returncode)
+    run_live(["apt-get", "dist-upgrade", "-y"])
+def cmd_grub(_): require_root(); run_live(["update-grub"])
 
 def main():
     p = argparse.ArgumentParser(prog="flex", description="FlexOS command-line control tool")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sp = sub.add_parser("info"); sp.set_defaults(func=cmd_info)
-    sp = sub.add_parser("hardware"); sp.add_argument("--json", action="store_true"); sp.set_defaults(func=cmd_hardware)
-    sp = sub.add_parser("doctor"); sp.set_defaults(func=cmd_doctor)
-    sp = sub.add_parser("profile")
-    sp.add_argument("action", choices=["list","show","set"])
-    sp.add_argument("name", nargs="?", choices=list(FLEX_PROFILES))
-    sp.set_defaults(func=cmd_profile)
-    sp = sub.add_parser("package-profile")
-    sp.add_argument("action", choices=["list","install"])
-    sp.add_argument("name", nargs="?")
-    sp.set_defaults(func=cmd_package_profile)
-    sp = sub.add_parser("desktop")
-    sp.add_argument("action", choices=["list","status","install"])
-    sp.add_argument("name", nargs="?")
-    sp.set_defaults(func=cmd_desktop)
-    sp = sub.add_parser("update"); sp.set_defaults(func=cmd_update)
-    sp = sub.add_parser("center"); sp.set_defaults(func=lambda _a: run_live(["flex-center"]))
-    sp = sub.add_parser("welcome"); sp.set_defaults(func=lambda _a: run_live(["flex-welcome"]))
-    args = p.parse_args()
-    if args.cmd == "profile" and args.action == "set" and not args.name:
-        p.error("profile set requires a profile name")
-    if args.cmd in ("package-profile","desktop") and args.action == "install" and not args.name:
-        p.error(f"{args.cmd} install requires a name")
+    sp=sub.add_parser("info"); sp.set_defaults(func=cmd_info)
+    sp=sub.add_parser("hardware"); sp.add_argument("--json", action="store_true"); sp.set_defaults(func=cmd_hardware)
+    sp=sub.add_parser("doctor"); sp.set_defaults(func=cmd_doctor)
+    sp=sub.add_parser("profile"); sp.add_argument("action", choices=["list","show","set"]); sp.add_argument("name", nargs="?", choices=list(FLEX_PROFILES)); sp.set_defaults(func=cmd_profile)
+    sp=sub.add_parser("package-profile"); sp.add_argument("action", choices=["list","install"]); sp.add_argument("name", nargs="?"); sp.set_defaults(func=cmd_package_profile)
+    sp=sub.add_parser("refresh"); sp.set_defaults(func=cmd_refresh)
+    sp=sub.add_parser("update"); sp.set_defaults(func=cmd_update)
+    sp=sub.add_parser("grub-rebuild"); sp.set_defaults(func=cmd_grub)
+    sp=sub.add_parser("center"); sp.set_defaults(func=lambda _a: run_live(["flex-center"]))
+    sp=sub.add_parser("welcome"); sp.set_defaults(func=lambda _a: run_live(["flex-welcome"]))
+    args=p.parse_args()
+    if args.cmd=="profile" and args.action=="set" and not args.name: p.error("profile set requires a profile name")
+    if args.cmd=="package-profile" and args.action=="install" and not args.name: p.error("package-profile install requires a name")
     args.func(args)
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

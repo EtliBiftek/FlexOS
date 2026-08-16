@@ -1,114 +1,176 @@
 #!/usr/bin/env python3
-import os, subprocess, sys
-from PyQt6.QtCore import QProcess
-from PyQt6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QListWidget, QMainWindow, QMessageBox,
-    QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QGridLayout
-)
+from __future__ import annotations
+import os, re, shutil, subprocess, sys
+from pathlib import Path
+from PyQt6.QtCore import QProcess, QTimer
+from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QListWidget, QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
 sys.path.insert(0, "/usr/lib/flexos")
-from flexlib import FLEX_PROFILES, current_profile, desktop_profiles, hardware_text, identity, package_profiles, doctor
+from flexlib import FLEX_PROFILES, current_profile, doctor, hardware_text, identity, package_profiles
 
-QSS = """
-QWidget { background:#111214; color:#d7d9dc; font-size:14px; }
-QListWidget { background:#17191c; border:0; padding:8px; }
-QListWidget::item { padding:12px; border-radius:8px; }
-QListWidget::item:selected { background:#2a2d31; color:white; }
-QPushButton { background:#24272b; border:1px solid #3b3e43; padding:10px 14px; border-radius:8px; }
-QPushButton:hover { background:#30343a; }
-QTextEdit { background:#17191c; border:1px solid #2d3035; border-radius:8px; padding:8px; }
-QLabel#title { font-size:26px; font-weight:700; }
-QLabel#muted { color:#8b8f95; }
-"""
+WALLPAPER="/usr/share/wallpapers/FlexOS/contents/images/2560x1440.svg"
+QSS='''
+* { font-family:"Noto Sans"; }
+QMainWindow,QWidget { background:#0d0f11; color:#e4e6e8; font-size:14px; }
+QWidget#sidebar { background:#121417; border-right:1px solid #202328; }
+QLabel#brand { font-size:22px; font-weight:700; color:#f2f3f4; padding:8px 8px 14px 8px; }
+QLabel#title { font-size:28px; font-weight:700; color:#f5f6f7; }
+QLabel#subtitle { color:#8d9299; font-size:13px; }
+QLabel#metric { font-size:26px; font-weight:700; color:#f6f7f8; }
+QLabel#metricName { color:#8d9299; font-size:12px; }
+QLabel#section { font-size:17px; font-weight:600; padding-top:8px; }
+QListWidget { background:transparent; border:0; outline:0; padding:4px; }
+QListWidget::item { padding:11px 12px; margin:2px; border-radius:8px; color:#aeb2b8; }
+QListWidget::item:hover { background:#191c20; color:#fff; }
+QListWidget::item:selected { background:#24282d; color:#fff; }
+QFrame#card { background:#15181c; border:1px solid #25292f; border-radius:12px; }
+QPushButton { background:#20242a; border:1px solid #343941; color:#eceeef; padding:9px 14px; border-radius:8px; }
+QPushButton:hover { background:#292e35; border-color:#454b55; }
+QPushButton#primary { background:#e6e8ea; color:#111315; border:0; font-weight:600; }
+QTextEdit { background:#111418; border:1px solid #282d33; border-radius:9px; padding:10px; color:#d7dadd; }
+QScrollArea { border:0; background:transparent; }
+'''
+
+def run_output(cmd):
+    try:
+        p=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=8)
+        return (p.stdout or '').strip()
+    except Exception as e: return str(e)
+
+def read_first(path,default="Bilinmiyor"):
+    try:return Path(path).read_text(errors='ignore').strip()
+    except Exception:return default
+
+def uptime_text():
+    try:
+        sec=int(float(Path('/proc/uptime').read_text().split()[0])); h,rem=divmod(sec,3600); m=rem//60
+        return f"{h} sa {m} dk" if h else f"{m} dk"
+    except Exception:return "Bilinmiyor"
+
+def temperature_text():
+    if shutil.which('sensors'):
+        out=run_output(['sensors','-A'])
+        temps=re.findall(r'([A-Za-z0-9 _-]+):\s+\+?([0-9.]+)°C',out)
+        if temps:return '\n'.join(f"{n.strip()}: {v} °C" for n,v in temps[:8])
+    return 'Sensör verisi bulunamadı.'
+
+class Card(QFrame):
+    def __init__(self,title='',text=''):
+        super().__init__(); self.setObjectName('card'); self.l=QVBoxLayout(self); self.l.setContentsMargins(16,14,16,14); self.l.setSpacing(7)
+        if title:
+            t=QLabel(title); t.setObjectName('section'); self.l.addWidget(t)
+        if text:
+            d=QLabel(text); d.setObjectName('subtitle'); d.setWordWrap(True); self.l.addWidget(d)
 
 class Center(QMainWindow):
     def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Flex Center")
-        self.resize(980, 640)
-        base = QWidget(); self.setCentralWidget(base)
-        layout = QHBoxLayout(base)
-        self.nav = QListWidget()
-        self.nav.addItems(["Genel Bakış","Flex Profiles","Donanım","Paket Profilleri","Masaüstleri","Sistem"])
-        self.nav.setFixedWidth(190)
-        self.stack = QStackedWidget()
-        layout.addWidget(self.nav); layout.addWidget(self.stack, 1)
-        self.stack.addWidget(self.overview())
-        self.stack.addWidget(self.profiles())
-        self.stack.addWidget(self.hardware())
-        self.stack.addWidget(self.packages())
-        self.stack.addWidget(self.desktops())
-        self.stack.addWidget(self.system())
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
-        self.nav.setCurrentRow(0)
-        self.proc = None
+        super().__init__(); self.setWindowTitle('Flex Center'); self.resize(1160,760); self.setMinimumSize(940,620); self.proc=None; self.prev_cpu=None
+        base=QWidget(); self.setCentralWidget(base); outer=QHBoxLayout(base); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
+        side=QWidget(); side.setObjectName('sidebar'); side.setFixedWidth(220); sl=QVBoxLayout(side); sl.setContentsMargins(14,18,14,16)
+        b=QLabel('F  Flex Center'); b.setObjectName('brand'); sl.addWidget(b)
+        self.nav=QListWidget(); self.nav.addItems(['Genel Bakış','Sistem','Flex Profiles','Donanım','Güncellemeler','Paket Profilleri','Görünüm','Başlangıç','Hakkında']); sl.addWidget(self.nav,1)
+        foot=QLabel(f"FlexOS {identity().get('version','0.1 Alpha')}\nKDE Plasma Edition"); foot.setObjectName('subtitle'); sl.addWidget(foot)
+        self.stack=QStackedWidget(); outer.addWidget(side); outer.addWidget(self.stack,1)
+        for p in [self.overview_page(),self.system_page(),self.profiles_page(),self.hardware_page(),self.updates_page(),self.packages_page(),self.appearance_page(),self.boot_page(),self.about_page()]: self.stack.addWidget(p)
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex); self.nav.setCurrentRow(0)
+        self.timer=QTimer(self); self.timer.timeout.connect(self.update_metrics); self.timer.start(1200); self.update_metrics()
 
-    def page(self, title, subtitle=""):
-        w=QWidget(); l=QVBoxLayout(w)
-        t=QLabel(title); t.setObjectName("title"); l.addWidget(t)
+    def page(self,title,subtitle=''):
+        area=QScrollArea(); area.setWidgetResizable(True); body=QWidget(); area.setWidget(body); l=QVBoxLayout(body); l.setContentsMargins(28,24,28,28); l.setSpacing(14)
+        t=QLabel(title); t.setObjectName('title'); l.addWidget(t)
         if subtitle:
-            s=QLabel(subtitle); s.setObjectName("muted"); s.setWordWrap(True); l.addWidget(s)
-        return w,l
+            s=QLabel(subtitle); s.setObjectName('subtitle'); s.setWordWrap(True); l.addWidget(s)
+        return area,l
 
-    def overview(self):
-        w,l=self.page("Flex Center","FlexOS yönetim merkezi")
-        i=identity()
-        text=QLabel(
-            f"<b>{i.get('name','FlexOS')} {i.get('version','')}</b><br>"
-            f"Geliştirici: {i.get('creator','Pifo')}<br>"
-            f"Taban: {i.get('base','Debian 13')}<br>"
-            f"Aktif Flex Profile: <b>{current_profile()}</b>"
-        ); text.setWordWrap(True); l.addWidget(text)
-        b=QPushButton("Flex Welcome'ı aç"); b.clicked.connect(lambda: QProcess.startDetached("flex-welcome")); l.addWidget(b)
-        l.addStretch(); return w
+    def metric(self,name):
+        c=Card(); v=QLabel('--'); v.setObjectName('metric'); n=QLabel(name); n.setObjectName('metricName'); c.l.addWidget(v); c.l.addWidget(n); return c,v
 
-    def profiles(self):
-        w,l=self.page("Flex Profiles","Güç ve kullanım senaryosunu tek tıkla değiştir.")
-        grid=QGridLayout(); l.addLayout(grid)
-        for idx,(name,data) in enumerate(FLEX_PROFILES.items()):
-            b=QPushButton(f"{name.title()}\n{data['description']}")
-            b.clicked.connect(lambda _=False,n=name:self.root_action(["profile","set",n]))
-            grid.addWidget(b, idx//2, idx%2)
-        l.addStretch(); return w
+    def overview_page(self):
+        p,l=self.page('Genel Bakış','FlexOS sisteminin anlık durumu ve hızlı kontroller.')
+        g=QGridLayout(); g.setSpacing(12)
+        c,self.cpu_metric=self.metric('CPU kullanımı'); g.addWidget(c,0,0)
+        c,self.mem_metric=self.metric('RAM kullanımı'); g.addWidget(c,0,1)
+        c,self.disk_metric=self.metric('Disk kullanımı'); g.addWidget(c,0,2)
+        c,self.up_metric=self.metric('Çalışma süresi'); g.addWidget(c,0,3); l.addLayout(g)
+        c=Card('FlexOS durumu'); self.overview_info=QLabel(); self.overview_info.setWordWrap(True); c.l.addWidget(self.overview_info); l.addWidget(c)
+        c=Card('Hızlı işlemler','Sık kullanılan araçlara tek tıkla eriş.'); row=QHBoxLayout()
+        q=QPushButton('Sistem Ayarları'); q.clicked.connect(lambda:QProcess.startDetached('systemsettings')); row.addWidget(q)
+        q=QPushButton('Flex Doctor'); q.clicked.connect(self.show_doctor); row.addWidget(q)
+        q=QPushButton('Güncellemeler'); q.clicked.connect(lambda:self.nav.setCurrentRow(4)); row.addWidget(q); c.l.addLayout(row); l.addWidget(c); l.addStretch(); return p
 
-    def hardware(self):
-        w,l=self.page("Donanım","FlexOS tarafından algılanan temel donanım.")
-        box=QTextEdit(); box.setReadOnly(True); box.setPlainText(hardware_text()); l.addWidget(box)
-        b=QPushButton("Yenile"); b.clicked.connect(lambda: box.setPlainText(hardware_text())); l.addWidget(b)
-        return w
+    def system_page(self):
+        p,l=self.page('Sistem','Çekirdek, oturum, boot ve dağıtım bilgileri.'); c=Card('Sistem bilgisi'); self.system_box=QTextEdit(); self.system_box.setReadOnly(True); c.l.addWidget(self.system_box); l.addWidget(c)
+        row=QHBoxLayout(); q=QPushButton('Yenile'); q.clicked.connect(self.refresh_system); row.addWidget(q); q=QPushButton('KInfoCenter'); q.clicked.connect(lambda:QProcess.startDetached('kinfocenter')); row.addWidget(q); l.addLayout(row); self.refresh_system(); l.addStretch(); return p
 
-    def packages(self):
-        w,l=self.page("Flex Package Profiles","İhtiyacına göre uygulama paketlerini topluca kur.")
-        for name,p in package_profiles().items():
-            b=QPushButton(f"{p.get('name',name)} — {p.get('description','')}")
-            b.clicked.connect(lambda _=False,n=name:self.root_action(["package-profile","install",n]))
-            l.addWidget(b)
-        l.addStretch(); return w
+    def profiles_page(self):
+        p,l=self.page('Flex Profiles','Güç tüketimi ve performans davranışını kullanım senaryona göre değiştir.'); self.profile_status=QLabel(); self.profile_status.setObjectName('subtitle'); l.addWidget(self.profile_status)
+        desc={'balanced':'Günlük kullanım için performans ve güç tüketimi dengesi.','performance':'Mümkün olan en yüksek performansı önceliklendirir.','gaming':'Oyun sırasında performans odaklı çalışma profili.','battery':'Dizüstünde daha düşük güç tüketimini önceliklendirir.','creator':'Render ve üretim işlerinde performans odaklı profil.','minimal':'Agresif ayar yapmadan temel FlexOS davranışı.'}
+        g=QGridLayout(); g.setSpacing(12)
+        for i,n in enumerate(FLEX_PROFILES):
+            c=Card(n.title(),desc.get(n,'')); q=QPushButton('Etkinleştir'); q.clicked.connect(lambda _=False,x=n:self.root_action(['profile','set',x],f'{x} profili')); c.l.addWidget(q); g.addWidget(c,i//2,i%2)
+        l.addLayout(g); l.addStretch(); self.refresh_profile(); return p
 
-    def desktops(self):
-        w,l=self.page("Masaüstü Ortamları","Installer seçimini gör veya kurulumdan sonra desteklenen masaüstlerini ekle.")
-        box=QTextEdit(); box.setReadOnly(True)
-        lines=[]
-        for key,p in desktop_profiles().items():
-            lines.append(f"{p.get('name',key)} [{p.get('status','')}]\n  {p.get('description','')}")
-        box.setPlainText("\n\n".join(lines)); l.addWidget(box)
-        return w
+    def hardware_page(self):
+        p,l=self.page('Donanım','CPU, GPU, RAM, ağ ve sıcaklık bilgileri.'); c=Card('Donanım özeti'); self.hw_box=QTextEdit(); self.hw_box.setReadOnly(True); c.l.addWidget(self.hw_box); l.addWidget(c)
+        c=Card('Sıcaklık sensörleri'); self.temp_box=QTextEdit(); self.temp_box.setReadOnly(True); self.temp_box.setMaximumHeight(150); c.l.addWidget(self.temp_box); l.addWidget(c)
+        q=QPushButton('Donanımı yeniden tara'); q.clicked.connect(self.refresh_hardware); l.addWidget(q); self.refresh_hardware(); l.addStretch(); return p
 
-    def system(self):
-        w,l=self.page("Sistem","FlexOS sağlık kontrolü ve güncellemeler.")
-        out=QTextEdit(); out.setReadOnly(True)
-        def refresh():
-            out.setPlainText("\n".join(f"[{s}] {m}" for s,m in doctor()))
-        refresh(); l.addWidget(out)
-        row=QHBoxLayout()
-        b=QPushButton("Doctor'ı yenile"); b.clicked.connect(refresh); row.addWidget(b)
-        b=QPushButton("Sistemi güncelle"); b.clicked.connect(lambda:self.root_action(["update"])); row.addWidget(b)
-        l.addLayout(row); return w
+    def updates_page(self):
+        p,l=self.page('Güncellemeler','APT tabanlı FlexOS/Debian paketlerini kontrol et ve güncelle.'); c=Card('Güncelleme durumu'); self.update_box=QTextEdit(); self.update_box.setReadOnly(True); self.update_box.setMinimumHeight(250); c.l.addWidget(self.update_box); l.addWidget(c)
+        row=QHBoxLayout(); q=QPushButton('Listeyi kontrol et'); q.clicked.connect(self.check_updates); row.addWidget(q); q=QPushButton('Paket indeksini yenile'); q.clicked.connect(lambda:self.root_action(['refresh'],'Paket indeksi')); row.addWidget(q); q=QPushButton('Tümünü güncelle'); q.setObjectName('primary'); q.clicked.connect(lambda:self.root_action(['update'],'Sistem güncellemesi')); row.addWidget(q); l.addLayout(row); self.check_updates(); l.addStretch(); return p
 
-    def root_action(self, args):
-        self.proc=QProcess(self)
-        self.proc.finished.connect(lambda code,status: QMessageBox.information(self,"FlexOS", "İşlem tamamlandı." if code==0 else f"İşlem hata koduyla bitti: {code}"))
-        self.proc.start("pkexec", ["/usr/bin/flex"] + args)
+    def packages_page(self):
+        p,l=self.page('Flex Package Profiles','KDE Plasma tabanını değiştirmeden kullanım amacına göre ek paketler kur.'); g=QGridLayout(); g.setSpacing(12)
+        for i,(n,d) in enumerate(package_profiles().items()):
+            c=Card(d.get('name',n),d.get('description','')); q=QPushButton('Profili uygula'); q.clicked.connect(lambda _=False,x=n:self.root_action(['package-profile','install',x],f'{x} paket profili')); c.l.addWidget(q); g.addWidget(c,i//2,i%2)
+        l.addLayout(g); l.addStretch(); return p
 
-app=QApplication(sys.argv); app.setStyleSheet(QSS)
-win=Center(); win.show()
-sys.exit(app.exec())
+    def appearance_page(self):
+        p,l=self.page('Görünüm','FlexOS KDE Plasma görünümünü yönet.'); c=Card('FlexOS görünümü','Varsayılan koyu renk şemasını ve duvar kağıdını yeniden uygula.'); row=QHBoxLayout(); q=QPushButton("Flex Dark'ı uygula"); q.clicked.connect(self.apply_flex_look); row.addWidget(q); q=QPushButton('KDE Sistem Ayarları'); q.clicked.connect(lambda:QProcess.startDetached('systemsettings')); row.addWidget(q); c.l.addLayout(row); l.addWidget(c)
+        l.addWidget(Card('KDE Plasma Edition','FlexOS yalnızca KDE Plasma 6 ile gelir. Alternatif masaüstü ortamları kurulmaz veya desteklenmez.')); l.addStretch(); return p
+
+    def boot_page(self):
+        p,l=self.page('Başlangıç','GRUB, UEFI/BIOS ve Plymouth bilgileri.'); c=Card('Boot bilgisi'); self.boot_box=QTextEdit(); self.boot_box.setReadOnly(True); self.boot_box.setMaximumHeight(260); c.l.addWidget(self.boot_box); l.addWidget(c)
+        row=QHBoxLayout(); q=QPushButton('GRUB yapılandırmasını yenile'); q.clicked.connect(lambda:self.root_action(['grub-rebuild'],'GRUB')); row.addWidget(q); q=QPushButton('Yenile'); q.clicked.connect(self.refresh_boot); row.addWidget(q); l.addLayout(row); self.refresh_boot(); l.addStretch(); return p
+
+    def about_page(self):
+        p,l=self.page('Hakkında','FlexOS dağıtım kimliği.'); i=identity(); c=Card('FlexOS'); q=QLabel(f"<b>{i.get('name','FlexOS')} {i.get('version','')}</b><br><br>Geliştirici: <b>{i.get('creator','Pifo')}</b><br>Taban: {i.get('base','Debian 13 (Trixie)')}<br>Masaüstü: KDE Plasma 6<br>Build: {i.get('build_id','0.1.0-alpha.1')}<br><br>Clean. Flexible. Yours."); q.setWordWrap(True); c.l.addWidget(q); l.addWidget(c); l.addStretch(); return p
+
+    def read_cpu(self):
+        try:
+            vals=list(map(int,Path('/proc/stat').read_text().splitlines()[0].split()[1:])); idle=vals[3]+(vals[4] if len(vals)>4 else 0); total=sum(vals); cur=(idle,total)
+            pct=0 if not self.prev_cpu else (100*(1-(idle-self.prev_cpu[0])/(total-self.prev_cpu[1])) if total!=self.prev_cpu[1] else 0); self.prev_cpu=cur; return max(0,min(100,pct))
+        except Exception:return 0
+
+    def update_metrics(self):
+        cpu=self.read_cpu()
+        try:
+            d={x.split(':')[0]:int(x.split()[1]) for x in Path('/proc/meminfo').read_text().splitlines() if ':' in x}; mem=100*(1-d.get('MemAvailable',0)/d.get('MemTotal',1))
+        except Exception:mem=0
+        try:du=shutil.disk_usage('/'); disk=100*du.used/du.total
+        except Exception:disk=0
+        self.cpu_metric.setText(f'{cpu:.0f}%'); self.mem_metric.setText(f'{mem:.0f}%'); self.disk_metric.setText(f'{disk:.0f}%'); self.up_metric.setText(uptime_text())
+        i=identity(); self.overview_info.setText(f"<b>{i.get('name','FlexOS')} {i.get('version','')}</b> · KDE Plasma Edition<br>Kernel: {os.uname().release}<br>Aktif Flex Profile: <b>{current_profile()}</b><br>Boot modu: {'UEFI' if Path('/sys/firmware/efi').exists() else 'BIOS/Legacy'}"); self.refresh_profile()
+
+    def refresh_profile(self):
+        if hasattr(self,'profile_status'): self.profile_status.setText(f'Şu an aktif profil: {current_profile()}')
+    def refresh_system(self):
+        self.system_box.setPlainText(f"Bilgisayar adı: {read_first('/etc/hostname')}\nİşletim sistemi: FlexOS\nMasaüstü: KDE Plasma\nOturum: {os.environ.get('XDG_CURRENT_DESKTOP','KDE')} / {os.environ.get('XDG_SESSION_TYPE','unknown')}\nKernel: {os.uname().release}\nMimari: {os.uname().machine}\nÇalışma süresi: {uptime_text()}\nBoot modu: {'UEFI' if Path('/sys/firmware/efi').exists() else 'BIOS/Legacy'}")
+    def refresh_hardware(self): self.hw_box.setPlainText(hardware_text()); self.temp_box.setPlainText(temperature_text())
+    def check_updates(self):
+        out=run_output(['bash','-lc','apt list --upgradable 2>/dev/null | tail -n +2 | head -n 100']) if shutil.which('apt') else 'APT bulunamadı.'
+        self.update_box.setPlainText(out or "Bekleyen güncelleme görünmüyor. Daha güncel sonuç için 'Paket indeksini yenile' düğmesini kullan.")
+    def refresh_boot(self):
+        selected=run_output(['plymouth-set-default-theme']) if shutil.which('plymouth-set-default-theme') else 'Bilinmiyor'; self.boot_box.setPlainText(f"Boot modu: {'UEFI' if Path('/sys/firmware/efi').exists() else 'BIOS/Legacy'}\nPlymouth teması: {selected}\nKernel komut satırı:\n{read_first('/proc/cmdline')}\n\nGRUB:\n{read_first('/etc/default/grub')[:1200]}")
+    def show_doctor(self): QMessageBox.information(self,'Flex Doctor','\n'.join(f'[{s}] {m}' for s,m in doctor()) or 'Sorun bulunamadı.')
+    def apply_flex_look(self):
+        for c in [['plasma-apply-colorscheme','BreezeDark'],['plasma-apply-desktoptheme','breeze-dark'],['plasma-apply-wallpaperimage',WALLPAPER]]:
+            if shutil.which(c[0]): subprocess.Popen(c,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        QMessageBox.information(self,'FlexOS','FlexOS koyu görünümü yeniden uygulandı.')
+    def root_action(self,args,label):
+        if self.proc and self.proc.state()!=QProcess.ProcessState.NotRunning: QMessageBox.warning(self,'FlexOS','Başka bir yönetim işlemi hâlâ çalışıyor.'); return
+        self.proc=QProcess(self); self.proc.setProgram('pkexec'); self.proc.setArguments(['/usr/bin/flex']+args); self.proc.finished.connect(lambda code,_:self.action_finished(code,label)); self.proc.start()
+    def action_finished(self,code,label):
+        QMessageBox.information(self,'FlexOS',f'{label} işlemi tamamlandı.') if code==0 else QMessageBox.warning(self,'FlexOS',f'{label} işlemi hata koduyla tamamlandı: {code}')
+        self.check_updates(); self.refresh_profile()
+
+app=QApplication(sys.argv); app.setApplicationName('Flex Center'); app.setStyleSheet(QSS); win=Center(); win.show(); sys.exit(app.exec())

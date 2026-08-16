@@ -9,7 +9,7 @@ locales
 keyboard-configuration
 console-setup
 
-# KDE Plasma 6 - live/rescue desktop and default FlexOS edition
+# KDE Plasma 6 - the only supported FlexOS desktop
 plasma-desktop
 plasma-workspace
 kwin-wayland
@@ -19,6 +19,7 @@ sddm-theme-breeze
 systemsettings
 kinfocenter
 plasma-systemmonitor
+plasma-integration
 powerdevil
 polkit-kde-agent-1
 pkexec
@@ -44,6 +45,7 @@ python3-pyqt6
 power-profiles-daemon
 dmidecode
 lshw
+lm-sensors
 
 # Network, Bluetooth and audio
 network-manager

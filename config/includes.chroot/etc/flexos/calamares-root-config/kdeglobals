@@ -1,0 +1,16 @@
+[General]
+ColorScheme=BreezeDark
+[KDE]
+LookAndFeelPackage=org.kde.breezedark.desktop
+[Colors:Window]
+BackgroundNormal=17,19,22
+ForegroundNormal=228,230,232
+[Colors:View]
+BackgroundNormal=20,23,27
+ForegroundNormal=228,230,232
+[Colors:Button]
+BackgroundNormal=34,38,44
+ForegroundNormal=236,238,240
+[Colors:Selection]
+BackgroundNormal=68,73,81
+ForegroundNormal=255,255,255
