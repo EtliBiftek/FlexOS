@@ -26,9 +26,9 @@
       "usr/share/pixmaps/flexos-logo.svg",
       "usr/share/sddm/themes/breeze/theme.conf.user",
       "usr/share/wallpapers/FlexOS",
-      "etc/skel/.local/share/konsole/FlexOS.profile",
-      "etc/skel/.config/konsolerc",
-      "etc/skel/.config/klipperrc"
+      "usr/share/flexos/skel/FlexOS.profile",
+      "usr/share/flexos/skel/konsolerc",
+      "usr/share/flexos/skel/klipperrc"
     ]
   },
   "flexos-center": {

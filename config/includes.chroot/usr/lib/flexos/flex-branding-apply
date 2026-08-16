@@ -1,17 +1,27 @@
 #!/bin/sh
 set -u
 
-src=/usr/share/icons/hicolor/scalable/apps/flexos-logo.svg
-
-if [ -f "$src" ]; then
+icon=/usr/share/icons/hicolor/scalable/apps/flexos-logo.svg
+if [ -f "$icon" ]; then
     for dst in \
       /usr/share/icons/hicolor/scalable/apps/distributor-logo.svg \
       /usr/share/icons/hicolor/scalable/apps/start-here.svg \
       /usr/share/icons/hicolor/scalable/apps/system-logo.svg
     do
-        install -m 0644 "$src" "$dst" 2>/dev/null || true
+        install -m 0644 "$icon" "$dst" 2>/dev/null || true
     done
 fi
 
-command -v update-icon-caches >/dev/null 2>&1 && update-icon-caches /usr/share/icons/hicolor >/dev/null 2>&1 || true
+# Source files live in a normal directory. Create the real hidden KDE skeleton
+# paths at install/build time so browser uploads cannot silently omit them.
+mkdir -p /etc/skel/.local/share/konsole /etc/skel/.config
+[ -f /usr/share/flexos/skel/FlexOS.profile ] && \
+    install -m 0644 /usr/share/flexos/skel/FlexOS.profile /etc/skel/.local/share/konsole/FlexOS.profile
+[ -f /usr/share/flexos/skel/konsolerc ] && \
+    install -m 0644 /usr/share/flexos/skel/konsolerc /etc/skel/.config/konsolerc
+[ -f /usr/share/flexos/skel/klipperrc ] && \
+    install -m 0644 /usr/share/flexos/skel/klipperrc /etc/skel/.config/klipperrc
+
+command -v update-icon-caches >/dev/null 2>&1 && \
+    update-icon-caches /usr/share/icons/hicolor >/dev/null 2>&1 || true
 exit 0
