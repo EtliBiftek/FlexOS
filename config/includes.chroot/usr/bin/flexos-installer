@@ -1,13 +1,66 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-if ! grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
-  command -v kdialog >/dev/null 2>&1 && kdialog --error "FlexOS Installer is intended to run from the live environment." || true
-  exit 1
+
+show_error() {
+    if command -v kdialog >/dev/null 2>&1; then
+        kdialog --title "FlexOS Installer" --error "$1"
+    else
+        notify-send "FlexOS Installer" "$1" 2>/dev/null || true
+    fi
+}
+
+# Installer sadece Live ISO'da çalışsın.
+if ! grep -qw 'boot=live' /proc/cmdline 2>/dev/null; then
+    show_error "FlexOS Installer can only be started from the live environment."
+    exit 1
 fi
-if command -v calamares-install-debian >/dev/null 2>&1; then
-  exec calamares-install-debian "$@"
+
+if ! command -v calamares >/dev/null 2>&1; then
+    show_error "Calamares is not installed."
+    exit 1
 fi
-# Fallback for package layout changes.
+
+# Debian Live kullanıcısının parola gerektirmeyen sudo erişimini kullan.
+if ! sudo -n true 2>/dev/null; then
+    show_error "Administrator privileges could not be obtained."
+    exit 1
+fi
+
+# Debian Calamares'ın yaptığı fstab workaround'u.
+FSTAB_MOVED=0
+
+if [[ -e /etc/fstab && ! -e /etc/fstab.orig.calamares ]]; then
+    if sudo -n mv /etc/fstab /etc/fstab.orig.calamares; then
+        FSTAB_MOVED=1
+    fi
+fi
+
+cleanup() {
+    if [[ "$FSTAB_MOVED" == "1" && -e /etc/fstab.orig.calamares ]]; then
+        sudo -n mv /etc/fstab.orig.calamares /etc/fstab 2>/dev/null || true
+    fi
+
+    if [[ -n "${DISPLAY:-}" ]]; then
+        xhost -si:localuser:root >/dev/null 2>&1 || true
+    fi
+}
+
+trap cleanup EXIT
+
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
-xhost +si:localuser:root >/dev/null 2>&1 || true
-exec pkexec calamares "$@"
+
+# Plasma Wayland altında Calamares'ı XWayland üzerinden güvenilir şekilde aç.
+if [[ -n "${DISPLAY:-}" ]]; then
+    xhost +si:localuser:root >/dev/null 2>&1 || true
+
+    sudo -n env \
+        DISPLAY="$DISPLAY" \
+        XAUTHORITY="${XAUTHORITY:-}" \
+        QT_QPA_PLATFORM=xcb \
+        QT_AUTO_SCREEN_SCALE_FACTOR=1 \
+        /usr/bin/calamares "$@"
+else
+    sudo -n env \
+        QT_AUTO_SCREEN_SCALE_FACTOR=1 \
+        /usr/bin/calamares "$@"
+fi
