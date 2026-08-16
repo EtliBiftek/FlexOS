@@ -1,0 +1,6 @@
+#!/bin/sh
+[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" = "btrfs" ] || exit 0
+[ -f /etc/snapper/configs/root ] || exit 0
+command -v snapper >/dev/null 2>&1 || exit 0
+snapper -c root create --description "Before package transaction" >/dev/null 2>&1 || true
+exit 0

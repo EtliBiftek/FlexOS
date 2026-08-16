@@ -1,27 +1,13 @@
 #!/bin/sh
 set -eu
-
-# GitHub/web uploads may store scripts as 0644. Normalize permissions inside
-# the image before any FlexOS helper is executed.
-chmod 0755 \
-  /usr/bin/flex \
-  /usr/bin/flex-center \
-  /usr/bin/flex-welcome \
-  /usr/bin/flexos-info \
-  /usr/bin/flexos-installer \
-  /usr/lib/flexos/flex-desktop-install \
-  /usr/lib/flexos/flex-identity-apply \
-  /usr/lib/flexos/flex-package-profile-install \
-  /usr/lib/flexos/flex-profile-apply \
-  /usr/lib/flexos/flexos-first-login
-
+chmod 0755 /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome /usr/bin/flex-system-report /usr/bin/flexos-info /usr/bin/flexos-installer \
+ /usr/lib/flexos/flex-admin /usr/lib/flexos/flexsuite.py /usr/lib/flexos/flex-snapshot-pre /usr/lib/flexos/flex-identity-apply \
+ /usr/lib/flexos/flex-package-profile-install /usr/lib/flexos/flex-profile-apply /usr/lib/flexos/flexos-first-login
 printf 'flexos\n' > /etc/hostname
 cat > /etc/hosts <<'EOF'
 127.0.0.1 localhost
 127.0.1.1 flexos
 ::1 localhost ip6-localhost ip6-loopback
 EOF
-
 /usr/lib/flexos/flex-identity-apply
-
 command -v update-icon-caches >/dev/null 2>&1 && update-icon-caches /usr/share/icons/hicolor || true

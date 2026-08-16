@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Flex System Report
+Name[tr]=Flex Sistem Raporu
+Comment=Create a FlexOS diagnostic report
+Exec=flex-system-report
+Icon=flexos-logo
+Terminal=false
+Categories=System;

@@ -1,4 +1,3 @@
-# Live system and kernel
 live-boot
 live-config
 live-config-systemd
@@ -8,8 +7,6 @@ systemd-sysv
 locales
 keyboard-configuration
 console-setup
-
-# KDE Plasma 6 - the only supported FlexOS desktop
 plasma-desktop
 plasma-workspace
 kwin-wayland
@@ -38,16 +35,19 @@ libpam-kwallet5
 ksystemstats
 kdialog
 libnotify-bin
-
-# FlexOS native utilities
 python3
 python3-pyqt6
 power-profiles-daemon
 dmidecode
 lshw
 lm-sensors
-
-# Network, Bluetooth and audio
+rsync
+snapper
+systemd-zram-generator
+flatpak
+ufw
+mokutil
+unattended-upgrades
 network-manager
 plasma-nm
 bluez
@@ -56,8 +56,6 @@ pipewire
 pipewire-audio
 wireplumber
 plasma-pa
-
-# Essential desktop applications
 dolphin
 konsole
 kate
@@ -66,8 +64,6 @@ kde-spectacle
 gwenview
 okular
 firefox-esr
-
-# Filesystems, storage and hardware
 udisks2
 upower
 parted
@@ -80,8 +76,6 @@ cryptsetup
 efibootmgr
 smartmontools
 fwupd
-
-# Boot and installer
 grub-common
 grub-pc-bin
 grub-efi-amd64-bin
@@ -93,8 +87,6 @@ calamares
 calamares-settings-debian
 squashfs-tools
 cracklib-runtime
-
-# Firmware and CPU microcode
 firmware-linux-free
 firmware-linux-nonfree
 firmware-iwlwifi
@@ -103,8 +95,6 @@ firmware-atheros
 firmware-mediatek
 intel-microcode
 amd64-microcode
-
-# Base utilities
 sudo
 ca-certificates
 curl
@@ -117,10 +107,6 @@ pciutils
 usbutils
 lsof
 htop
-
-# FlexOS visual boot
 plymouth
 plymouth-themes
-
-# Installer XWayland authorization helper
 x11-xserver-utils

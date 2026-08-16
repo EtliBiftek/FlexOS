@@ -1,0 +1,98 @@
+[
+  {
+    "id": "vlc",
+    "name": "VLC",
+    "method": "apt",
+    "package": "vlc",
+    "category": "Medya",
+    "description": "Video ve ses oynatıcı."
+  },
+  {
+    "id": "gimp",
+    "name": "GIMP",
+    "method": "apt",
+    "package": "gimp",
+    "category": "Yaratıcı",
+    "description": "Görsel düzenleme."
+  },
+  {
+    "id": "krita",
+    "name": "Krita",
+    "method": "apt",
+    "package": "krita",
+    "category": "Yaratıcı",
+    "description": "Dijital çizim."
+  },
+  {
+    "id": "kdenlive",
+    "name": "Kdenlive",
+    "method": "apt",
+    "package": "kdenlive",
+    "category": "Yaratıcı",
+    "description": "Video düzenleyici."
+  },
+  {
+    "id": "blender",
+    "name": "Blender",
+    "method": "apt",
+    "package": "blender",
+    "category": "Yaratıcı",
+    "description": "3B modelleme ve render."
+  },
+  {
+    "id": "git",
+    "name": "Git",
+    "method": "apt",
+    "package": "git",
+    "category": "Geliştirme",
+    "description": "Sürüm kontrol sistemi."
+  },
+  {
+    "id": "steam",
+    "name": "Steam",
+    "method": "flatpak",
+    "package": "com.valvesoftware.Steam",
+    "category": "Oyun",
+    "description": "Steam istemcisi."
+  },
+  {
+    "id": "discord",
+    "name": "Discord",
+    "method": "flatpak",
+    "package": "com.discordapp.Discord",
+    "category": "İletişim",
+    "description": "Discord istemcisi."
+  },
+  {
+    "id": "spotify",
+    "name": "Spotify",
+    "method": "flatpak",
+    "package": "com.spotify.Client",
+    "category": "Medya",
+    "description": "Spotify istemcisi."
+  },
+  {
+    "id": "obs",
+    "name": "OBS Studio",
+    "method": "flatpak",
+    "package": "com.obsproject.Studio",
+    "category": "Yaratıcı",
+    "description": "Kayıt ve yayın."
+  },
+  {
+    "id": "vscode",
+    "name": "Visual Studio Code",
+    "method": "flatpak",
+    "package": "com.visualstudio.code",
+    "category": "Geliştirme",
+    "description": "Kod düzenleyici."
+  },
+  {
+    "id": "prismlauncher",
+    "name": "Prism Launcher",
+    "method": "flatpak",
+    "package": "org.prismlauncher.PrismLauncher",
+    "category": "Oyun",
+    "description": "Minecraft launcher."
+  }
+]

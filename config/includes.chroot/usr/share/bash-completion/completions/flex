@@ -1,17 +1,2 @@
-_flex_complete() {
-    local cur
-    COMPREPLY=()
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    case "${COMP_CWORD}" in
-      1) COMPREPLY=( $(compgen -W "info hardware doctor profile package-profile refresh update grub-rebuild center welcome" -- "$cur") ); return ;;
-    esac
-    case "${COMP_WORDS[1]}" in
-      profile)
-        if [[ ${COMP_CWORD} -eq 2 ]]; then COMPREPLY=( $(compgen -W "list show set" -- "$cur") );
-        elif [[ "${COMP_WORDS[2]}" == set ]]; then COMPREPLY=( $(compgen -W "balanced performance gaming battery creator minimal" -- "$cur") ); fi ;;
-      package-profile)
-        if [[ ${COMP_CWORD} -eq 2 ]]; then COMPREPLY=( $(compgen -W "list install" -- "$cur") );
-        elif [[ "${COMP_WORDS[2]}" == install ]]; then COMPREPLY=( $(compgen -W "minimal standard gaming developer creator" -- "$cur") ); fi ;;
-    esac
-}
+_flex_complete(){ local cur="${COMP_WORDS[COMP_CWORD]}"; if [[ ${COMP_CWORD} -eq 1 ]];then COMPREPLY=( $(compgen -W "info hardware doctor recommend security drivers updates snapshots kernel profile center welcome report" -- "$cur") );fi; }
 complete -F _flex_complete flex

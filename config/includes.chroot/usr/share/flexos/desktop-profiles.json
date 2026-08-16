@@ -3,7 +3,6 @@
     "name": "KDE Plasma",
     "status": "native-offline",
     "packages": [],
-    "session_patterns": ["plasma.desktop"],
-    "description": "FlexOS'un tek ve resmi masaüstü ortamı. KDE Plasma 6 ISO içinde bulunur ve internetsiz kurulabilir."
+    "description": "FlexOS'un tek ve resmi masaüstü ortamı."
   }
 }

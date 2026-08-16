@@ -1,16 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d0f11"/><stop offset="1" stop-color="#1b1f24"/></linearGradient>
-    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1c2025"/><stop offset="1" stop-color="#14171b"/></linearGradient>
-  </defs>
-  <rect width="900" height="440" rx="28" fill="url(#bg)"/>
-  <circle cx="820" cy="70" r="130" fill="#24282e" opacity=".45"/>
-  <circle cx="760" cy="420" r="210" fill="#171a1f" opacity=".8"/>
-  <rect x="48" y="48" width="804" height="344" rx="22" fill="url(#card)" stroke="#30353c"/>
-  <g transform="translate(88 105)"><rect width="148" height="148" rx="34" fill="#0b0d0f"/><path d="M38 34h75v22H63v20h43v21H63v36H38z" fill="#e3e5e7"/><path d="M94 98h22V86l25 20-25 20v-12H91v-16z" fill="#797e85"/></g>
-  <text x="285" y="155" font-family="sans-serif" font-size="48" font-weight="700" fill="#f0f1f2">FlexOS</text>
-  <text x="288" y="194" font-family="sans-serif" font-size="18" fill="#9499a0">KDE Plasma Edition</text>
-  <text x="288" y="241" font-family="sans-serif" font-size="17" fill="#c9ccd0">Temiz. Esnek. Sana ait.</text>
-  <text x="288" y="284" font-family="sans-serif" font-size="14" fill="#777c83">Debian 13 tabanlı · KDE Plasma 6 · Created by Pifo</text>
-  <rect x="288" y="315" width="118" height="34" rx="17" fill="#e3e5e7"/><text x="347" y="337" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="600" fill="#121416">0.1 ALPHA</text>
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d0f11"/><stop offset="1" stop-color="#1d2126"/></linearGradient></defs>
+<rect width="900" height="440" rx="28" fill="url(#g)"/>
+<rect x="48" y="48" width="804" height="344" rx="22" fill="#15181c" stroke="#30353c"/>
+<rect x="88" y="108" width="145" height="145" rx="34" fill="#0b0d0f"/>
+<path d="M126 142h74v22h-49v20h42v21h-42v36h-25z" fill="#e3e5e7"/>
+<path d="M181 206h21v-12l25 20-25 20v-12h-25v-16z" fill="#797e85"/>
+<text x="284" y="160" font-family="sans-serif" font-size="48" font-weight="700" fill="#f0f1f2">FlexOS</text>
+<text x="287" y="201" font-family="sans-serif" font-size="18" fill="#9499a0">KDE Plasma Edition</text>
+<text x="287" y="249" font-family="sans-serif" font-size="17" fill="#c9ccd0">Clean. Flexible. Yours.</text>
+<text x="287" y="292" font-family="sans-serif" font-size="14" fill="#777c83">Debian 13 based · Created by Pifo</text>
 </svg>

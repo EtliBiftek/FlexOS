@@ -1,69 +1,33 @@
 #!/usr/bin/env python3
-import argparse, json, os, subprocess, sys
-sys.path.insert(0, "/usr/lib/flexos")
-from flexlib import FLEX_PROFILES, apply_profile, current_profile, doctor, hardware, hardware_text, identity, package_profiles
-
-def require_root():
-    if os.geteuid() != 0:
-        print("This operation needs administrator privileges. Run it with: sudo flex ...", file=sys.stderr)
-        raise SystemExit(1)
-
-def run_live(cmd):
-    raise SystemExit(subprocess.run(cmd).returncode)
-
-def cmd_info(_):
-    i = identity()
-    print(f"{i.get('name','FlexOS')} {i.get('version','')}")
-    print(f"Creator: {i.get('creator','Pifo')}")
-    print(f"Base: {i.get('base','Debian 13')}")
-    print(f"Kernel: {os.uname().release}")
-    print("Desktop: KDE Plasma")
-    print(f"Flex Profile: {current_profile()}")
-    print(f"Project: {i.get('project','')}")
-
-def cmd_hardware(args):
-    print(json.dumps(hardware(), indent=2, ensure_ascii=False) if args.json else hardware_text())
-
-def cmd_doctor(_):
-    for state, message in doctor(): print(f"[{state}] {message}")
-
-def cmd_profile(args):
-    if args.action == "list":
-        for n, v in FLEX_PROFILES.items(): print(f"{n:12} {v['description']}")
-    elif args.action == "show": print(current_profile())
-    elif args.action == "set":
-        require_root(); result = apply_profile(args.name); print(f"Flex Profile set to {args.name} ({result}).")
-
-def cmd_package_profile(args):
-    profiles = package_profiles()
-    if args.action == "list":
-        for key, p in profiles.items(): print(f"{key:12} {p.get('description','')}")
-        return
-    require_root(); run_live(["/usr/lib/flexos/flex-package-profile-install", args.name])
-
-def cmd_refresh(_): require_root(); run_live(["apt-get", "update"])
-def cmd_update(_):
-    require_root()
-    p = subprocess.run(["apt-get", "update"])
-    if p.returncode: raise SystemExit(p.returncode)
-    run_live(["apt-get", "dist-upgrade", "-y"])
-def cmd_grub(_): require_root(); run_live(["update-grub"])
-
-def main():
-    p = argparse.ArgumentParser(prog="flex", description="FlexOS command-line control tool")
-    sub = p.add_subparsers(dest="cmd", required=True)
-    sp=sub.add_parser("info"); sp.set_defaults(func=cmd_info)
-    sp=sub.add_parser("hardware"); sp.add_argument("--json", action="store_true"); sp.set_defaults(func=cmd_hardware)
-    sp=sub.add_parser("doctor"); sp.set_defaults(func=cmd_doctor)
-    sp=sub.add_parser("profile"); sp.add_argument("action", choices=["list","show","set"]); sp.add_argument("name", nargs="?", choices=list(FLEX_PROFILES)); sp.set_defaults(func=cmd_profile)
-    sp=sub.add_parser("package-profile"); sp.add_argument("action", choices=["list","install"]); sp.add_argument("name", nargs="?"); sp.set_defaults(func=cmd_package_profile)
-    sp=sub.add_parser("refresh"); sp.set_defaults(func=cmd_refresh)
-    sp=sub.add_parser("update"); sp.set_defaults(func=cmd_update)
-    sp=sub.add_parser("grub-rebuild"); sp.set_defaults(func=cmd_grub)
-    sp=sub.add_parser("center"); sp.set_defaults(func=lambda _a: run_live(["flex-center"]))
-    sp=sub.add_parser("welcome"); sp.set_defaults(func=lambda _a: run_live(["flex-welcome"]))
-    args=p.parse_args()
-    if args.cmd=="profile" and args.action=="set" and not args.name: p.error("profile set requires a profile name")
-    if args.cmd=="package-profile" and args.action=="install" and not args.name: p.error("package-profile install requires a name")
-    args.func(args)
-if __name__ == "__main__": main()
+import argparse,json,os,subprocess,sys
+sys.path.insert(0,"/usr/lib/flexos")
+from flexsuite import *
+from flexlib import FLEX_PROFILES,apply_profile,current_profile,identity,doctor
+p=argparse.ArgumentParser(prog="flex");s=p.add_subparsers(dest="cmd",required=True)
+for n in ("info","doctor","recommend","security","drivers","updates","snapshots","kernel","center","welcome","report"):s.add_parser(n)
+h=s.add_parser("hardware");h.add_argument("--json",action="store_true")
+pr=s.add_parser("profile");pr.add_argument("action",choices=["list","show","set"]);pr.add_argument("name",nargs="?")
+a=p.parse_args()
+if a.cmd=="info":
+    i=identity();print(f"FlexOS {i.get('version','0.1 Alpha')}\nCreator: Pifo\nDesktop: KDE Plasma\nKernel: {os.uname().release}\nProfile: {current_profile()}")
+elif a.cmd=="hardware":print(json.dumps(hardware(),ensure_ascii=False,indent=2) if a.json else hardware_text())
+elif a.cmd=="doctor":
+    for x,y in doctor():print(f"[{x}] {y}")
+elif a.cmd=="recommend":
+    for x,y in recommendations():print(f"[{x}] {y}")
+elif a.cmd=="security":print(security_status())
+elif a.cmd=="drivers":print(driver_status())
+elif a.cmd=="updates":print(update_preview())
+elif a.cmd=="snapshots":print(snapshot_status())
+elif a.cmd=="kernel":print(kernel_status())
+elif a.cmd=="profile":
+    if a.action=="list":
+        for n,v in FLEX_PROFILES.items():print(f"{n:12} {v['description']}")
+    elif a.action=="show":print(current_profile())
+    else:
+        if os.geteuid()!=0:raise SystemExit("Run with sudo.")
+        if not a.name:p.error("profile set requires name")
+        print(apply_profile(a.name))
+elif a.cmd=="center":raise SystemExit(subprocess.run(["flex-center"]).returncode)
+elif a.cmd=="welcome":raise SystemExit(subprocess.run(["flex-welcome"]).returncode)
+elif a.cmd=="report":raise SystemExit(subprocess.run(["flex-system-report"]).returncode)

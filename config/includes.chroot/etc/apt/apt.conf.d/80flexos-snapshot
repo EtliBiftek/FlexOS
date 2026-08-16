@@ -1,0 +1,1 @@
+DPkg::Pre-Invoke { "if [ -x /usr/lib/flexos/flex-snapshot-pre ]; then /usr/lib/flexos/flex-snapshot-pre || true; fi"; };

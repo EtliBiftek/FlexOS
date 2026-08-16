@@ -1,24 +1,18 @@
 Window.SetBackgroundTopColor(0.035, 0.038, 0.043);
 Window.SetBackgroundBottomColor(0.035, 0.038, 0.043);
-
 logo = Image.Text("FlexOS", 0.84, 0.85, 0.87);
 logo_sprite = Sprite(logo);
 logo_sprite.SetX(Window.GetWidth()/2 - logo.GetWidth()/2);
 logo_sprite.SetY(Window.GetHeight()/2 - logo.GetHeight()/2 - 10);
-
 indicator = Image.Text("•   •   •", 0.38, 0.40, 0.43);
 indicator_sprite = Sprite(indicator);
 indicator_sprite.SetX(Window.GetWidth()/2 - indicator.GetWidth()/2);
 indicator_sprite.SetY(Window.GetHeight()/2 + logo.GetHeight());
-
 message = Image.Text("", 0.48, 0.50, 0.53);
 message_sprite = Sprite(message);
 message_sprite.SetY(Window.GetHeight()/2 + logo.GetHeight() + 34);
-
 fun message_callback(text) {
-    if (text == "Starting" || text == "Starting...") {
-        text = "";
-    }
+    if (text == "Starting" || text == "Starting..." || text == "Stopping" || text == "Stopping...") { text = ""; }
     message = Image.Text(text, 0.48, 0.50, 0.53);
     message_sprite.SetImage(message);
     message_sprite.SetX(Window.GetWidth()/2 - message.GetWidth()/2);

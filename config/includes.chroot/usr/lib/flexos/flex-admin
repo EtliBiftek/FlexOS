@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+import os, shutil, subprocess, sys
+from pathlib import Path
+
+def run(c,check=True,timeout=None):
+    print("+"," ".join(c),flush=True)
+    p=subprocess.run(c,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=timeout)
+    if p.stdout:print(p.stdout,end="" if p.stdout.endswith("\n") else "\n")
+    if check and p.returncode:raise SystemExit(p.returncode)
+    return p.returncode,p.stdout or ""
+
+if os.geteuid()!=0:raise SystemExit("Administrator privileges required.")
+a=sys.argv[1:]
+if len(a)<2:raise SystemExit("No action")
+g,x=a[0],a[1]
+def apt_update():run(["apt-get","update"],timeout=600)
+def btrfs():return subprocess.run(["findmnt","-n","-o","FSTYPE","/"],text=True,stdout=subprocess.PIPE).stdout.strip()=="btrfs"
+def snapready():return Path("/etc/snapper/configs/root").exists()
+def presnap(desc):
+    if btrfs() and snapready() and shutil.which("snapper"):run(["snapper","-c","root","create","--description",desc],check=False)
+def grubkey(k,v):
+    p=Path("/etc/default/grub.d/70-flexos-user.cfg");p.parent.mkdir(parents=True,exist_ok=True)
+    l=p.read_text(errors="ignore").splitlines() if p.exists() else [];l=[z for z in l if not z.startswith(k+"=")];l.append(f'{k}="{v}"');p.write_text("\n".join(l)+"\n")
+def nonfree():
+    for p in Path("/etc/apt/sources.list.d").glob("*.sources"):
+        t=p.read_text(errors="ignore");o=[];ch=False
+        for line in t.splitlines():
+            if line.startswith("Components:"):
+                c=line.split(":",1)[1].split()
+                for q in ("main","contrib","non-free","non-free-firmware"):
+                    if q not in c:c.append(q);ch=True
+                line="Components: "+" ".join(c)
+            o.append(line)
+        if ch:p.write_text("\n".join(o)+"\n")
+
+if g=="update":
+    if x=="refresh":apt_update()
+    elif x=="install":presnap("Before FlexOS update");apt_update();run(["apt-get","dist-upgrade","-y"],timeout=3600)
+elif g=="driver" and x=="nvidia":
+    nonfree();presnap("Before NVIDIA driver");apt_update();run(["apt-get","install","-y","linux-headers-amd64","nvidia-driver","nvidia-settings"],timeout=3600);print("Reboot recommended.")
+elif g=="snapshot":
+    if x=="setup":
+        if not btrfs():raise SystemExit("Root filesystem is not Btrfs.")
+        if not snapready():run(["snapper","-c","root","create-config","/"],timeout=120)
+    elif x=="create":
+        if not snapready():raise SystemExit("Setup snapshots first.")
+        run(["snapper","-c","root","create","--description"," ".join(a[2:]) or "FlexOS manual snapshot"])
+    elif x=="list":run(["snapper","-c","root","list"])
+    elif x=="delete":run(["snapper","-c","root","delete",a[2]])
+    elif x=="rollback":
+        if not btrfs() or not snapready():raise SystemExit("Rollback unavailable.")
+        run(["snapper","-c","root","rollback",a[2]],timeout=300);run(["update-grub"],check=False);print("Reboot required.")
+elif g=="performance":
+    if x=="zram":
+        p=Path("/etc/systemd/zram-generator.conf")
+        if a[2]=="on":p.write_text("[zram0]\nzram-size = min(ram / 2, 8192)\ncompression-algorithm = zstd\n")
+        else:p.unlink(missing_ok=True)
+        run(["systemctl","daemon-reload"],check=False);print("Reboot recommended.")
+    elif x=="swappiness":
+        v=int(a[2]);Path("/etc/sysctl.d/90-flexos-performance.conf").write_text(f"vm.swappiness={v}\n");run(["sysctl","-p","/etc/sysctl.d/90-flexos-performance.conf"],check=False)
+elif g=="cleanup" and x=="system":
+    presnap("Before Flex Cleanup");run(["apt-get","autoremove","-y"],check=False,timeout=1200);run(["apt-get","clean"],check=False);run(["journalctl","--vacuum-time=7d"],check=False)
+elif g=="boot":
+    if x=="timeout":n=int(a[2]);grubkey("GRUB_TIMEOUT",str(n));grubkey("GRUB_TIMEOUT_STYLE","menu" if n else "hidden");run(["update-grub"])
+    elif x=="quiet":grubkey("GRUB_CMDLINE_LINUX_DEFAULT","quiet splash" if a[2]=="on" else "");run(["update-grub"])
+elif g=="kernel" and x=="backports":
+    Path("/etc/apt/sources.list.d/flexos-trixie-backports.sources").write_text("Types: deb\nURIs: http://deb.debian.org/debian\nSuites: trixie-backports\nComponents: main contrib non-free non-free-firmware\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n")
+    presnap("Before backports kernel");apt_update();run(["apt-get","install","-y","-t","trixie-backports","linux-image-amd64","linux-headers-amd64"],timeout=3600);run(["update-grub"],check=False)
+elif g=="repair":
+    if x=="dpkg":run(["dpkg","--configure","-a"],timeout=1200)
+    elif x=="packages":apt_update();run(["apt-get","-f","install","-y"],timeout=1800)
+    elif x=="apt":shutil.rmtree("/var/lib/apt/lists",ignore_errors=True);Path("/var/lib/apt/lists").mkdir(parents=True,exist_ok=True);apt_update()
+    elif x=="initramfs":run(["update-initramfs","-u","-k","all"],timeout=1200)
+    elif x=="grub":run(["update-grub"],timeout=300)
+    elif x=="network":run(["systemctl","restart","NetworkManager"],timeout=60)
+elif g=="security":
+    if x=="firewall":
+        if a[2]=="on":run(["ufw","default","deny","incoming"],check=False);run(["ufw","default","allow","outgoing"],check=False);run(["ufw","--force","enable"])
+        else:run(["ufw","--force","disable"])
+    elif x=="autoupdates":
+        p=Path("/etc/apt/apt.conf.d/20auto-upgrades")
+        if a[2]=="on":p.write_text('APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n');run(["systemctl","enable","--now","unattended-upgrades.service"],check=False)
+        else:p.unlink(missing_ok=True);run(["systemctl","disable","--now","unattended-upgrades.service"],check=False)
+    elif x=="coredumps":
+        p=Path("/etc/systemd/coredump.conf.d/90-flexos-privacy.conf");p.parent.mkdir(parents=True,exist_ok=True)
+        p.write_text("[Coredump]\nStorage=none\nProcessSizeMax=0\n") if a[2]=="off" else p.unlink(missing_ok=True)
+    elif x=="location":
+        run(["systemctl","unmask" if a[2]=="on" else "mask","geoclue.service"],check=False)
+        if a[2]=="off":run(["systemctl","stop","geoclue.service"],check=False)
+elif g=="app" and x=="apt":
+    presnap("Before app install");apt_update();run(["apt-get","install","-y",a[2]],timeout=3600)
+else:raise SystemExit("Unknown action")

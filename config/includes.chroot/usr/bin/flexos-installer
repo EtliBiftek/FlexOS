@@ -1,21 +1,39 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-LOG="${HOME}/Desktop/FlexOS-Installer.log"; FSTAB_MOVED=0; XHOST_GRANTED=0
-mkdir -p "$(dirname "$LOG")"; : > "$LOG"
+LOG="${HOME}/Desktop/FlexOS-Installer.log"
+FSTAB_MOVED=0
+XHOST_GRANTED=0
+mkdir -p "$(dirname "$LOG")"
+: > "$LOG"
 log(){ printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
-show_error(){ local message="$1"; log "ERROR: $message"; if command -v kdialog >/dev/null 2>&1; then kdialog --title "FlexOS Installer" --error "$(printf '%s\n\nDiagnostic log:\n%s' "$message" "$LOG")" || true; elif command -v notify-send >/dev/null 2>&1; then notify-send -u critical "FlexOS Installer" "$message" || true; fi; command -v kate >/dev/null 2>&1 && kate "$LOG" >/dev/null 2>&1 & }
-cleanup(){ [[ "$XHOST_GRANTED" == 1 ]] && xhost -si:localuser:root >> "$LOG" 2>&1 || true; if [[ "$FSTAB_MOVED" == 1 && -e /etc/fstab.orig.calamares ]]; then sudo -n mv /etc/fstab.orig.calamares /etc/fstab >> "$LOG" 2>&1 || true; fi; }
+err(){
+  log "ERROR: $1"
+  if command -v kdialog >/dev/null 2>&1; then kdialog --title "FlexOS Installer" --error "$1"$'\n\n'"Log: $LOG" || true; fi
+  if command -v kate >/dev/null 2>&1; then kate "$LOG" >/dev/null 2>&1 & fi
+}
+cleanup(){
+  if [[ "$XHOST_GRANTED" == "1" ]]; then xhost -si:localuser:root >>"$LOG" 2>&1 || true; fi
+  if [[ "$FSTAB_MOVED" == "1" && -e /etc/fstab.orig.calamares ]]; then sudo -n mv /etc/fstab.orig.calamares /etc/fstab >>"$LOG" 2>&1 || true; fi
+}
 trap cleanup EXIT
-log "FlexOS Installer launcher started"; log "Session: ${XDG_SESSION_TYPE:-unknown}"; log "DISPLAY: ${DISPLAY:-unset}"
-grep -qw 'boot=live' /proc/cmdline 2>/dev/null || { show_error "FlexOS Installer can only be started from the live environment."; exit 1; }
-command -v calamares >/dev/null 2>&1 || { show_error "Calamares is not installed in this live image."; exit 1; }
-command -v sudo >/dev/null 2>&1 && sudo -n true >> "$LOG" 2>&1 || { show_error "Administrator privileges could not be obtained automatically."; exit 1; }
-if [[ -e /etc/fstab && ! -e /etc/fstab.orig.calamares ]]; then sudo -n mv /etc/fstab /etc/fstab.orig.calamares >> "$LOG" 2>&1 && FSTAB_MOVED=1 || { show_error "The live filesystem could not be prepared for installation."; exit 1; }; fi
-[[ -n "${DISPLAY:-}" ]] || { show_error "XWayland is not available in this live session (DISPLAY is unset)."; exit 1; }
-xhost +si:localuser:root >> "$LOG" 2>&1 || { show_error "The installer could not obtain access to the graphical session."; exit 1; }; XHOST_GRANTED=1
-log "Starting modern FlexOS Calamares UI"
+grep -qw 'boot=live' /proc/cmdline || { err "FlexOS Installer yalnızca live ortamında çalışır."; exit 1; }
+command -v calamares >/dev/null || { err "Calamares bulunamadı."; exit 1; }
+sudo -n true >>"$LOG" 2>&1 || { err "Yönetici yetkisi otomatik alınamadı."; exit 1; }
+if [[ -e /etc/fstab && ! -e /etc/fstab.orig.calamares ]]; then
+  if sudo -n mv /etc/fstab /etc/fstab.orig.calamares >>"$LOG" 2>&1; then FSTAB_MOVED=1; fi
+fi
+[[ -n "${DISPLAY:-}" ]] || { err "XWayland DISPLAY bulunamadı."; exit 1; }
+xhost +si:localuser:root >>"$LOG" 2>&1 || { err "Grafik oturumuna erişilemedi."; exit 1; }
+XHOST_GRANTED=1
 set +e
-sudo -n env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin DISPLAY="$DISPLAY" LANG="${LANG:-C.UTF-8}" XDG_CONFIG_HOME=/etc/flexos/calamares-root-config QT_STYLE_OVERRIDE=Breeze QT_QPA_PLATFORM=xcb QT_AUTO_SCREEN_SCALE_FACTOR=1 QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1 /usr/bin/calamares -d "$@" >> "$LOG" 2>&1
-rc=$?; set -e; log "Calamares exited with status $rc"
-[[ "$rc" -eq 0 ]] || { show_error "FlexOS Installer failed to start correctly. The diagnostic log will now open automatically."; exit "$rc"; }
+sudo -n env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+ DISPLAY="$DISPLAY" LANG="${LANG:-C.UTF-8}" XDG_CONFIG_HOME=/etc/flexos/calamares-root-config QT_STYLE_OVERRIDE=Breeze \
+ QT_QPA_PLATFORM=xcb QT_AUTO_SCREEN_SCALE_FACTOR=1 QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1 \
+ /usr/bin/calamares -d "$@" >>"$LOG" 2>&1
+rc=$?
+set -e
+if [[ $rc -ne 0 ]]; then
+  err "FlexOS Installer başlatılamadı. Tanılama logu açılacak."
+  exit "$rc"
+fi
 exit 0

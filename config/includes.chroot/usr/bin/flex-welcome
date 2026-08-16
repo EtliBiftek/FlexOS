@@ -1,87 +1,68 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-import shutil, subprocess, sys
+import sys
 from pathlib import Path
 from PyQt6.QtCore import QProcess
-from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QStackedWidget, QTextEdit, QVBoxLayout, QWidget
-sys.path.insert(0, "/usr/lib/flexos")
-from flexlib import FLEX_PROFILES, hardware_text, package_profiles
-MARKER=Path.home()/'.config/flexos/welcome-complete-v2'
-WALLPAPER='/usr/share/wallpapers/FlexOS/contents/images/2560x1440.svg'
-QSS='''
-* { font-family:"Noto Sans"; }
-QMainWindow,QWidget { background:#0d0f11; color:#e5e7e9; font-size:14px; }
-QWidget#rail { background:#121417; border-right:1px solid #22262b; }
-QLabel#logo { font-size:24px; font-weight:700; }
-QLabel#hero { font-size:32px; font-weight:700; }
-QLabel#subtitle { color:#90959c; }
-QLabel#stepActive { color:#fff; font-weight:600; padding:7px; }
-QLabel#step { color:#6f747b; padding:7px; }
-QFrame#card { background:#15181c; border:1px solid #282d33; border-radius:12px; }
-QPushButton { background:#20242a; border:1px solid #363b43; padding:10px 14px; border-radius:8px; }
-QPushButton:hover { background:#2a2f36; }
-QPushButton#primary { background:#e6e8ea; color:#111315; border:0; font-weight:600; }
-QComboBox { background:#171a1f; border:1px solid #30353d; padding:9px; border-radius:8px; }
-QTextEdit { background:#111418; border:1px solid #282d33; border-radius:9px; padding:10px; }
-'''
-
-class Welcome(QMainWindow):
-    steps=['Hoş Geldiniz','Sistem','Profil','Paketler','Görünüm','Tamamla']
+from PyQt6.QtWidgets import QApplication,QCheckBox,QComboBox,QHBoxLayout,QLabel,QMainWindow,QPushButton,QStackedWidget,QTextEdit,QVBoxLayout,QWidget
+sys.path.insert(0,"/usr/lib/flexos")
+from flexsuite import hardware_text,recommendations,app_catalog,install_flatpak_user
+from flexlib import FLEX_PROFILES
+MARK=Path.home()/".config/flexos/welcome-complete-v3"
+QSS="""*{font-family:"Noto Sans"}QMainWindow,QWidget{background:#0d0f11;color:#e5e7e9;font-size:14px}QWidget#rail{background:#121417;border-right:1px solid #25292f}
+QLabel#hero{font-size:31px;font-weight:700}QLabel#muted{color:#90959c}QLabel#active{font-weight:600;color:#fff;padding:7px}QLabel#step{color:#6f747b;padding:7px}
+QPushButton{background:#20242a;border:1px solid #373d45;padding:10px 14px;border-radius:8px}QPushButton#primary{background:#e6e8ea;color:#101214;border:0;font-weight:600}
+QTextEdit{background:#101317;border:1px solid #292e35;border-radius:9px}QComboBox{background:#171a1f;border:1px solid #30353d;padding:8px;border-radius:8px}"""
+class W(QMainWindow):
+    steps=["Hoş Geldiniz","Donanım","Profil","Gizlilik & Güvenlik","Uygulamalar","Güncellemeler","Hazır"]
     def __init__(self):
-        super().__init__(); self.setWindowTitle('Flex Welcome'); self.resize(960,620); self.setMinimumSize(820,560); self.index=0; self.proc=None; self.queue=[]; self.failed=False
-        base=QWidget(); self.setCentralWidget(base); outer=QHBoxLayout(base); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
-        rail=QWidget(); rail.setObjectName('rail'); rail.setFixedWidth(215); rl=QVBoxLayout(rail); rl.setContentsMargins(22,24,18,20)
-        logo=QLabel('F  Flex Welcome'); logo.setObjectName('logo'); rl.addWidget(logo); rl.addSpacing(18); self.step_labels=[]
-        for s in self.steps: q=QLabel(s); self.step_labels.append(q); rl.addWidget(q)
-        rl.addStretch(); rl.addWidget(QLabel('FlexOS · KDE Plasma Edition'))
-        right=QWidget(); r=QVBoxLayout(right); r.setContentsMargins(28,24,28,24); self.stack=QStackedWidget(); r.addWidget(self.stack,1)
-        for p in [self.page_welcome(),self.page_system(),self.page_profile(),self.page_packages(),self.page_appearance(),self.page_finish()]: self.stack.addWidget(p)
-        nav=QHBoxLayout(); self.back=QPushButton('Geri'); self.back.clicked.connect(self.prev); nav.addWidget(self.back); nav.addStretch(); self.nextb=QPushButton('İleri'); self.nextb.setObjectName('primary'); self.nextb.clicked.connect(self.next); nav.addWidget(self.nextb); r.addLayout(nav)
-        outer.addWidget(rail); outer.addWidget(right,1); self.refresh_steps()
-    def page_base(self,title,subtitle):
-        w=QWidget(); l=QVBoxLayout(w); l.setSpacing(13); t=QLabel(title); t.setObjectName('hero'); l.addWidget(t); s=QLabel(subtitle); s.setObjectName('subtitle'); s.setWordWrap(True); l.addWidget(s); return w,l
-    def card(self,title,text=''):
-        c=QFrame(); c.setObjectName('card'); l=QVBoxLayout(c); l.setContentsMargins(16,14,16,14); t=QLabel(title); t.setStyleSheet('font-size:17px;font-weight:600'); l.addWidget(t)
-        if text: d=QLabel(text); d.setObjectName('subtitle'); d.setWordWrap(True); l.addWidget(d)
-        return c,l
-    def page_welcome(self):
-        w,l=self.page_base("FlexOS'a hoş geldiniz",'İlk kurulum birkaç adımda FlexOS’u kullanım şeklinize göre hazırlayacak.'); c,cl=self.card('KDE Plasma Edition','FlexOS tek masaüstü olarak KDE Plasma 6 kullanır. Tema, ayarlar ve FlexOS araçları tek masaüstü için optimize edilir.'); cl.addWidget(QLabel('Clean. Flexible. Yours.')); l.addWidget(c); l.addWidget(self.card('Bu sihirbaz ne yapacak?','Donanımı gösterecek, Flex Profile ve paket profilini seçtirecek, ardından FlexOS görünümünü hazırlayacak.')[0]); l.addStretch(); return w
-    def page_system(self):
-        w,l=self.page_base('Sisteminiz','FlexOS’un algıladığı temel donanım.'); box=QTextEdit(); box.setReadOnly(True); box.setPlainText(hardware_text()); l.addWidget(box,1); return w
-    def page_profile(self):
-        w,l=self.page_base('Flex Profile','Güç ve performans davranışını seçin.'); self.profile=QComboBox(); desc={'balanced':'Dengeli — günlük kullanım için önerilen varsayılan.','performance':'Performance — en yüksek performansı önceliklendirir.','gaming':'Gaming — oyun kullanımına yönelik performans profili.','battery':'Battery — dizüstünde güç tasarrufunu önceliklendirir.','creator':'Creator — render ve üretim işleri için performans odaklı.','minimal':'Minimal — temel, agresif olmayan profil.'}
-        for n in FLEX_PROFILES:self.profile.addItem(desc.get(n,n),n)
-        self.profile.setCurrentIndex(max(0,self.profile.findData('balanced'))); l.addWidget(self.profile); l.addWidget(self.card('Öneri','Genel kullanım için Balanced iyi başlangıçtır. Profili daha sonra Flex Center’dan değiştirebilirsiniz.')[0]); l.addStretch(); return w
-    def page_packages(self):
-        w,l=self.page_base('Flex Package Profile','Kullanım amacınıza göre ek yazılım grubunu seçin.'); self.packages=QComboBox()
-        for n,p in package_profiles().items(): self.packages.addItem(f"{p.get('name',n)} — {p.get('description','')}",n)
-        i=self.packages.findData('standard'); self.packages.setCurrentIndex(i if i>=0 else 0); l.addWidget(self.packages); l.addWidget(self.card('Not','Gaming, Developer veya Creator gibi ek profiller internet gerektirebilir. KDE Plasma hiçbir profilde değişmez.')[0]); l.addStretch(); return w
-    def page_appearance(self):
-        w,l=self.page_base('FlexOS görünümü','FlexOS’un koyu KDE görünümünü kullanın veya daha sonra KDE Sistem Ayarları’ndan özelleştirin.'); self.apply_dark=QCheckBox('FlexOS koyu temasını ve varsayılan duvar kağıdını uygula'); self.apply_dark.setChecked(True); l.addWidget(self.apply_dark); self.show_again=QCheckBox('Flex Welcome bir sonraki girişte tekrar açılsın'); l.addWidget(self.show_again); b=QPushButton('KDE Sistem Ayarları’nı aç'); b.clicked.connect(lambda:QProcess.startDetached('systemsettings')); l.addWidget(b); l.addStretch(); return w
-    def page_finish(self):
-        w,l=self.page_base('Hazır','Seçimlerinizi uygulayıp FlexOS’u kullanmaya başlayın.'); self.summary=QLabel(); self.summary.setWordWrap(True); l.addWidget(self.summary); l.addWidget(self.card('Sonraki adım','Tüm bu ayarları daha sonra Flex Center üzerinden değiştirebilirsiniz.')[0]); l.addStretch(); return w
-    def refresh_steps(self):
-        for i,q in enumerate(self.step_labels): q.setObjectName('stepActive' if i==self.index else 'step'); q.style().unpolish(q); q.style().polish(q)
-        self.stack.setCurrentIndex(self.index); self.back.setEnabled(self.index>0); self.nextb.setText('Uygula ve Bitir' if self.index==len(self.steps)-1 else 'İleri')
-        if self.index==len(self.steps)-1:self.summary.setText(f"<b>Masaüstü:</b> KDE Plasma<br><b>Flex Profile:</b> {self.profile.currentData()}<br><b>Paket Profili:</b> {self.packages.currentData()}<br><b>Flex Dark:</b> {'Evet' if self.apply_dark.isChecked() else 'Hayır'}")
-    def prev(self):
-        if self.index>0:self.index-=1;self.refresh_steps()
-    def next(self):
-        if self.index<len(self.steps)-1:self.index+=1;self.refresh_steps();return
-        self.apply()
-    def apply(self):
-        self.nextb.setEnabled(False); self.back.setEnabled(False)
-        if self.apply_dark.isChecked():
-            for c in [['plasma-apply-colorscheme','BreezeDark'],['plasma-apply-desktoptheme','breeze-dark'],['plasma-apply-wallpaperimage',WALLPAPER]]:
-                if shutil.which(c[0]):subprocess.Popen(c,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        self.queue=[['/usr/bin/flex','profile','set',str(self.profile.currentData())],['/usr/bin/flex','package-profile','install',str(self.packages.currentData())]]; self.failed=False; self.run_next()
-    def run_next(self):
-        if not self.queue:self.finish_apply();return
-        args=self.queue.pop(0); self.proc=QProcess(self); self.proc.setProgram('pkexec'); self.proc.setArguments(args); self.proc.finished.connect(self.command_done); self.proc.start()
-    def command_done(self,code,_status): self.failed=self.failed or code!=0; self.run_next()
-    def finish_apply(self):
-        if self.show_again.isChecked():MARKER.unlink(missing_ok=True)
-        else:MARKER.parent.mkdir(parents=True,exist_ok=True);MARKER.touch()
-        QMessageBox.warning(self,'FlexOS','Bazı ayarlar uygulanamadı. Flex Center içinden tekrar deneyebilirsiniz.') if self.failed else QMessageBox.information(self,'FlexOS','FlexOS başlangıç ayarları tamamlandı.'); QProcess.startDetached('flex-center'); self.close()
-
-app=QApplication(sys.argv); app.setApplicationName('Flex Welcome'); app.setStyleSheet(QSS); win=Welcome(); win.show(); sys.exit(app.exec())
+        super().__init__();self.setWindowTitle("Flex Welcome");self.resize(980,650);self.i=0;self.proc=None;self.queue=[]
+        b=QWidget();self.setCentralWidget(b);o=QHBoxLayout(b);o.setContentsMargins(0,0,0,0)
+        rail=QWidget();rail.setObjectName("rail");rail.setFixedWidth(225);rl=QVBoxLayout(rail);rl.setContentsMargins(20,22,16,18)
+        q=QLabel("F  Flex Welcome");q.setStyleSheet("font-size:23px;font-weight:700");rl.addWidget(q);rl.addSpacing(15);self.labels=[]
+        for s in self.steps:q=QLabel(s);self.labels.append(q);rl.addWidget(q)
+        rl.addStretch();rl.addWidget(QLabel("FlexOS · KDE Plasma Edition"))
+        right=QWidget();r=QVBoxLayout(right);r.setContentsMargins(28,24,28,24);self.stack=QStackedWidget();r.addWidget(self.stack,1)
+        for f in (self.p0,self.p1,self.p2,self.p3,self.p4,self.p5,self.p6):self.stack.addWidget(f())
+        nav=QHBoxLayout();self.back=QPushButton("Geri");self.back.clicked.connect(self.prev);nav.addWidget(self.back);nav.addStretch();self.next=QPushButton("İleri");self.next.setObjectName("primary");self.next.clicked.connect(self.go);nav.addWidget(self.next);r.addLayout(nav)
+        o.addWidget(rail);o.addWidget(right,1);self.refresh()
+    def base(self,t,d):
+        w=QWidget();l=QVBoxLayout(w);q=QLabel(t);q.setObjectName("hero");l.addWidget(q);q=QLabel(d);q.setObjectName("muted");q.setWordWrap(True);l.addWidget(q);return w,l
+    def p0(self):
+        w,l=self.base("FlexOS'a hoş geldiniz","KDE Plasma tabanlı FlexOS'u birkaç adımda hazırlayın.");q=QLabel("Flex Center, Update Center, Driver Manager, Snapshot, Recovery, Security ve daha fazlası hazır.");q.setWordWrap(True);l.addWidget(q);l.addStretch();return w
+    def p1(self):
+        w,l=self.base("Donanımınız","FlexOS'un donanım analizi ve önerileri.");b=QTextEdit();b.setReadOnly(True);b.setPlainText(hardware_text()+"\n\nÖNERİLER\n"+"\n".join(f"[{a}] {b}" for a,b in recommendations()));l.addWidget(b);return w
+    def p2(self):
+        w,l=self.base("Flex Profile","Başlangıç performans/güç profilini seçin.");self.prof=QComboBox()
+        for n in FLEX_PROFILES:self.prof.addItem(n.title(),n)
+        self.prof.setCurrentIndex(max(0,self.prof.findData("balanced")));l.addWidget(self.prof);l.addStretch();return w
+    def p3(self):
+        w,l=self.base("Gizlilik & Güvenlik","İlk güvenlik tercihleri.");self.fire=QCheckBox("Firewall'ı etkinleştir");self.fire.setChecked(True);l.addWidget(self.fire);self.auto=QCheckBox("Otomatik güvenlik güncellemelerini etkinleştir");self.auto.setChecked(True);l.addWidget(self.auto);self.dumps=QCheckBox("Crash dump dosyalarını diskte tutma");self.dumps.setChecked(True);l.addWidget(self.dumps);l.addStretch();return w
+    def p4(self):
+        w,l=self.base("İsteğe Bağlı Uygulamalar","Flatpak/Flathub üzerinden uygulamalar.");self.apps=[]
+        for a in app_catalog():
+            if a["id"] not in {"steam","discord","obs","vscode","prismlauncher"}:continue
+            q=QCheckBox(f"{a['name']} — {a['description']}");q.setProperty("app",a);self.apps.append(q);l.addWidget(q)
+        l.addStretch();return w
+    def p5(self):
+        w,l=self.base("Güncellemeler","İlk açılışta paket indeksini yenileyebilirsiniz.");self.apt=QCheckBox("APT paket indeksini yenile");self.apt.setChecked(True);l.addWidget(self.apt);l.addStretch();return w
+    def p6(self):
+        w,l=self.base("Hazır","Seçimler uygulanacak ve Flex Center açılacak.");self.sum=QLabel();self.sum.setWordWrap(True);l.addWidget(self.sum);l.addStretch();return w
+    def refresh(self):
+        self.stack.setCurrentIndex(self.i);self.back.setEnabled(self.i>0);self.next.setText("Uygula ve Başla" if self.i==len(self.steps)-1 else "İleri")
+        for x,q in enumerate(self.labels):q.setObjectName("active" if x==self.i else "step");q.style().unpolish(q);q.style().polish(q)
+        if self.i==len(self.steps)-1:self.sum.setText(f"<b>Profile:</b> {self.prof.currentData()}<br><b>Firewall:</b> {'Açık' if self.fire.isChecked() else 'Kapalı'}<br><b>Security updates:</b> {'Açık' if self.auto.isChecked() else 'Kapalı'}")
+    def prev(self):self.i=max(0,self.i-1);self.refresh()
+    def go(self):
+        if self.i<len(self.steps)-1:self.i+=1;self.refresh();return
+        self.queue=[["/usr/bin/flex","profile","set",self.prof.currentData()]]
+        if self.fire.isChecked():self.queue.append(["/usr/lib/flexos/flex-admin","security","firewall","on"])
+        if self.auto.isChecked():self.queue.append(["/usr/lib/flexos/flex-admin","security","autoupdates","on"])
+        if self.dumps.isChecked():self.queue.append(["/usr/lib/flexos/flex-admin","security","coredumps","off"])
+        if self.apt.isChecked():self.queue.append(["/usr/lib/flexos/flex-admin","update","refresh"])
+        self.next.setEnabled(False);self.back.setEnabled(False);self.runq()
+    def runq(self):
+        if not self.queue:
+            for q in self.apps:
+                if q.isChecked():install_flatpak_user(q.property("app")["package"])
+            MARK.parent.mkdir(parents=True,exist_ok=True);MARK.touch();QProcess.startDetached("flex-center");self.close();return
+        c=self.queue.pop(0);self.proc=QProcess(self);self.proc.setProgram("pkexec");self.proc.setArguments(c);self.proc.finished.connect(lambda *_:self.runq());self.proc.start()
+app=QApplication(sys.argv);app.setStyleSheet(QSS);w=W();w.show();sys.exit(app.exec())

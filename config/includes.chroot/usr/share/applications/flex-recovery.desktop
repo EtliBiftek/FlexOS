@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Flex Recovery
+Comment=Repair and recover FlexOS
+Exec=flex-center --page recovery
+Icon=flexos-logo
+Terminal=false
+Categories=System;Settings;
