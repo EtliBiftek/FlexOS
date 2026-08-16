@@ -7,12 +7,16 @@ if [ -d /etc/calamares/branding/debian ]; then
   cp -f /usr/share/flexos/calamares/branding/branding.desc /etc/calamares/branding/debian/branding.desc
   cp -f /usr/share/flexos/calamares/branding/flexos-logo.svg /etc/calamares/branding/debian/flexos-logo.svg
   cp -f /usr/share/flexos/calamares/branding/welcome.svg /etc/calamares/branding/debian/welcome.svg
+  cp -f /usr/share/flexos/calamares/branding/show.qml /etc/calamares/branding/debian/show.qml
+fi
+
+# Calamares 3.3 expects this setting explicitly. Older Debian settings may omit it.
+if [ -f /etc/calamares/settings.conf ] && ! grep -q '^hide-back-and-next-during-exec:' /etc/calamares/settings.conf; then
+  printf '\nhide-back-and-next-during-exec: false\n' >> /etc/calamares/settings.conf
 fi
 
 # Avoid Debian-branded launcher duplicates in the live desktop/application menu.
 rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
 rm -f /usr/share/applications/calamares-install-debian.desktop
 
-# Our wrapper deliberately reuses /usr/bin/calamares-install-debian for its
-# live-build fstab workaround and Wayland/XWayland root authorization.
 chmod 0755 /usr/bin/flexos-installer /usr/lib/flexos/flexos-first-login

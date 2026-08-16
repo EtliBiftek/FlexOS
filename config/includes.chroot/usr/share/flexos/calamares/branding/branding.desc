@@ -28,8 +28,12 @@ images:
     productIcon:    "flexos-logo.svg"
     productWelcome: "welcome.svg"
 
+slideshow: "show.qml"
+
 style:
     SidebarBackground:        "#151619"
     SidebarText:              "#aeb0b4"
     SidebarTextCurrent:       "#ffffff"
     SidebarBackgroundCurrent: "#777a80"
+
+slideshowAPI: 2
