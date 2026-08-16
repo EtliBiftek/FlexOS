@@ -9,7 +9,7 @@ locales
 keyboard-configuration
 console-setup
 
-# KDE Plasma 6 - intentionally not the full kde-standard/kde-full metapackage
+# KDE Plasma 6 - live/rescue desktop and default FlexOS edition
 plasma-desktop
 plasma-workspace
 kwin-wayland
@@ -21,6 +21,7 @@ kinfocenter
 plasma-systemmonitor
 powerdevil
 polkit-kde-agent-1
+pkexec
 xdg-desktop-portal-kde
 xdg-user-dirs
 xdg-utils
@@ -36,6 +37,13 @@ libpam-kwallet5
 ksystemstats
 kdialog
 libnotify-bin
+
+# FlexOS native utilities
+python3
+python3-pyqt6
+power-profiles-daemon
+dmidecode
+lshw
 
 # Network, Bluetooth and audio
 network-manager

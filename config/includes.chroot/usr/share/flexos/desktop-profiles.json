@@ -1,0 +1,211 @@
+{
+  "kde": {
+    "name": "KDE Plasma",
+    "status": "native-offline",
+    "packages": [],
+    "session_patterns": [
+      "plasma.desktop"
+    ],
+    "description": "FlexOS default. Included in the ISO and works without internet."
+  },
+  "gnome": {
+    "name": "GNOME",
+    "status": "native-network",
+    "packages": [
+      "gnome-core",
+      "xdg-desktop-portal-gnome"
+    ],
+    "session_patterns": [
+      "gnome.desktop",
+      "gnome-wayland.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "cinnamon": {
+    "name": "Cinnamon",
+    "status": "native-network",
+    "packages": [
+      "cinnamon-core",
+      "xdg-desktop-portal-gtk",
+      "network-manager-gnome"
+    ],
+    "session_patterns": [
+      "cinnamon.desktop",
+      "cinnamon2d.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "deepin": {
+    "name": "Deepin Desktop Environment",
+    "status": "experimental-pending",
+    "packages": [
+      "deepin-terminal",
+      "deepin-icon-theme",
+      "deepin-notifications"
+    ],
+    "session_patterns": [],
+    "description": "Debian 13 does not provide a complete supported DDE session. FlexOS keeps KDE fallback and records this choice."
+  },
+  "xfce": {
+    "name": "XFCE",
+    "status": "native-network",
+    "packages": [
+      "xfce4",
+      "xfce4-terminal",
+      "xfce4-power-manager",
+      "xfce4-notifyd",
+      "xdg-desktop-portal-gtk",
+      "network-manager-gnome"
+    ],
+    "session_patterns": [
+      "xfce.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "mate": {
+    "name": "MATE",
+    "status": "native-network",
+    "packages": [
+      "mate-desktop-environment-core",
+      "mate-notification-daemon",
+      "xdg-desktop-portal-gtk",
+      "network-manager-gnome"
+    ],
+    "session_patterns": [
+      "mate.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "lxqt": {
+    "name": "LXQt",
+    "status": "native-network",
+    "packages": [
+      "lxqt-core",
+      "qterminal",
+      "lxqt-notificationd"
+    ],
+    "session_patterns": [
+      "lxqt.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "i3": {
+    "name": "i3wm / i3-gaps",
+    "status": "native-network",
+    "packages": [
+      "i3",
+      "dunst",
+      "rofi",
+      "network-manager-gnome",
+      "lxpolkit"
+    ],
+    "session_patterns": [
+      "i3.desktop"
+    ],
+    "description": "Debian i3. Modern i3 already includes the gaps functionality; there is no separate i3-gaps package."
+  },
+  "sway": {
+    "name": "Sway",
+    "status": "native-network",
+    "packages": [
+      "sway",
+      "swaybg",
+      "swayidle",
+      "waybar",
+      "foot",
+      "dunst",
+      "network-manager-gnome",
+      "lxpolkit",
+      "xdg-desktop-portal-wlr"
+    ],
+    "session_patterns": [
+      "sway.desktop"
+    ],
+    "description": "Debian 13 official Wayland compositor. Internet required during installation."
+  },
+  "hyprland": {
+    "name": "Hyprland",
+    "status": "backports-network",
+    "packages": [
+      "hyprland",
+      "hyprland-backgrounds",
+      "waybar",
+      "foot",
+      "dunst",
+      "network-manager-gnome",
+      "lxpolkit",
+      "xdg-desktop-portal-hyprland"
+    ],
+    "session_patterns": [
+      "hyprland.desktop"
+    ],
+    "description": "Installed from Debian 13 backports. Internet required."
+  },
+  "budgie": {
+    "name": "Budgie",
+    "status": "native-network",
+    "packages": [
+      "budgie-desktop-environment",
+      "xdg-desktop-portal-gtk",
+      "network-manager-gnome"
+    ],
+    "session_patterns": [
+      "budgie-desktop.desktop",
+      "budgie.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "cosmic": {
+    "name": "COSMIC Desktop",
+    "status": "experimental-pending",
+    "packages": [],
+    "session_patterns": [],
+    "description": "A complete supported COSMIC stack is not in Debian 13 stable. Choice is recorded; KDE remains the safe fallback."
+  },
+  "pantheon": {
+    "name": "Pantheon",
+    "status": "experimental-pending",
+    "packages": [],
+    "session_patterns": [],
+    "description": "A complete supported Pantheon session is not in Debian 13 stable. Choice is recorded; KDE remains the safe fallback."
+  },
+  "ukui": {
+    "name": "UKUI",
+    "status": "experimental-pending",
+    "packages": [
+      "ukui-themes",
+      "ukui-menu",
+      "ukui-system-monitor"
+    ],
+    "session_patterns": [],
+    "description": "Debian 13 contains UKUI components but not the complete supported session stack. KDE remains fallback."
+  },
+  "regolith": {
+    "name": "Regolith Desktop",
+    "status": "experimental-pending",
+    "packages": [],
+    "session_patterns": [],
+    "description": "Regolith is not provided as a complete Debian 13 stable desktop stack. Choice is recorded for future FlexOS repository support."
+  },
+  "enlightenment": {
+    "name": "Enlightenment",
+    "status": "native-network",
+    "packages": [
+      "enlightenment",
+      "terminology",
+      "network-manager-gnome",
+      "lxpolkit"
+    ],
+    "session_patterns": [
+      "enlightenment.desktop"
+    ],
+    "description": "Debian 13 official packages. Internet required during installation."
+  },
+  "trinity": {
+    "name": "Trinity Desktop Environment",
+    "status": "experimental-pending",
+    "packages": [],
+    "session_patterns": [],
+    "description": "TDE requires an external repository not enabled by FlexOS alpha. Choice is recorded; KDE remains fallback."
+  }
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Apply FlexOS distribution identity
+DefaultDependencies=no
+After=local-fs.target
+Before=getty-pre.target display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/flexos/flex-identity-apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

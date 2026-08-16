@@ -8,8 +8,6 @@ cat > /etc/hosts <<'EOF'
 ::1 localhost ip6-localhost ip6-loopback
 EOF
 
-# Applications generally read /usr/lib/os-release; keep it identical.
-cp /etc/os-release /usr/lib/os-release
+/usr/lib/flexos/flex-identity-apply
 
-# Keep update-alternatives and icon caches sane where available.
 command -v update-icon-caches >/dev/null 2>&1 && update-icon-caches /usr/share/icons/hicolor || true

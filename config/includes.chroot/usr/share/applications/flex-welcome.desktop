@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Flex Welcome
+Name[tr]=Flex Welcome
+Comment=Get started with FlexOS
+Comment[tr]=FlexOS'u ilk kez yapılandır
+Exec=flex-welcome
+Icon=flexos-logo
+Terminal=false
+Categories=System;

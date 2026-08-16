@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+base=/usr/share/flexos/identity
+install -m 0644 "$base/os-release" /etc/os-release
+install -m 0644 "$base/os-release" /usr/lib/os-release
+install -m 0644 "$base/issue" /etc/issue
+install -m 0644 "$base/issue.net" /etc/issue.net
+install -m 0644 "$base/motd" /etc/motd

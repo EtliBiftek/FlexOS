@@ -17,6 +17,16 @@ required=(
   config/includes.chroot/usr/share/applications/flexos-installer.desktop
   config/includes.chroot/usr/bin/flexos-installer
   config/includes.chroot/usr/bin/flexos-info
+  config/includes.chroot/usr/bin/flex
+  config/includes.chroot/usr/bin/flex-center
+  config/includes.chroot/usr/bin/flex-welcome
+  config/includes.chroot/usr/lib/flexos/flexlib.py
+  config/includes.chroot/usr/lib/flexos/flex-desktop-install
+  config/includes.chroot/usr/lib/flexos/flex-package-profile-install
+  config/includes.chroot/usr/share/flexos/desktop-profiles.json
+  config/includes.chroot/usr/share/flexos/package-profiles.json
+  config/includes.chroot/usr/share/flexos/calamares/modules/packagechooser-desktop.conf
+  config/includes.chroot/usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf
   config/hooks/live/010-flexos-branding.hook.chroot
   config/hooks/live/020-flexos-calamares.hook.chroot
   config/hooks/live/030-flexos-services.hook.chroot
@@ -26,7 +36,7 @@ for f in "${required[@]}"; do
 done
 [[ $errors -eq 0 ]] && ok "required project files"
 
-for f in build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot config/includes.chroot/usr/bin/flexos-installer config/includes.chroot/usr/lib/flexos/flexos-first-login; do
+for f in build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot config/includes.chroot/usr/bin/flexos-installer config/includes.chroot/usr/lib/flexos/flexos-first-login config/includes.chroot/usr/lib/flexos/flex-identity-apply; do
   [[ -f "$f" ]] || continue
   bash -n "$f" || fail "shell syntax: $f"
 done
@@ -36,9 +46,11 @@ pkg="config/package-lists/flexos.list.chroot"
 if [[ -f "$pkg" ]]; then
   dupes="$(grep -Ev '^\s*(#|$)' "$pkg" | sort | uniq -d || true)"
   [[ -z "$dupes" ]] || fail "duplicate packages: $dupes"
-  ok "package list has no duplicates"
+  [[ -z "$dupes" ]] && ok "package list has no duplicates"
   grep -qx 'plasma-workspace-wayland' "$pkg" && fail "obsolete package plasma-workspace-wayland is not in Debian 13" || true
   grep -qx 'kwin-wayland' "$pkg" || fail "Wayland support requires kwin-wayland"
+  grep -qx 'python3-pyqt6' "$pkg" || fail "Flex Center requires python3-pyqt6"
+  grep -qx 'power-profiles-daemon' "$pkg" || fail "Flex Profiles require power-profiles-daemon"
 fi
 
 osr="config/includes.chroot/etc/os-release"
@@ -55,18 +67,16 @@ else
   ok "LF line endings"
 fi
 
-
 if command -v python3 >/dev/null 2>&1; then
   python3 - <<'PY2' || fail "structured asset validation"
 from pathlib import Path
-import configparser
+import configparser, json, py_compile
 import xml.etree.ElementTree as ET
 
 for p in Path('branding').rglob('*.svg'):
     ET.parse(p)
 for p in Path('config/includes.chroot/usr/share').rglob('*.svg'):
     ET.parse(p)
-
 for p in Path('config/includes.chroot/usr/share/applications').glob('*.desktop'):
     cp = configparser.ConfigParser(interpolation=None, strict=False)
     cp.optionxform = str
@@ -74,8 +84,20 @@ for p in Path('config/includes.chroot/usr/share/applications').glob('*.desktop')
     assert 'Desktop Entry' in cp, f'{p}: missing [Desktop Entry]'
     assert cp['Desktop Entry'].get('Type'), f'{p}: missing Type'
     assert cp['Desktop Entry'].get('Name'), f'{p}: missing Name'
+for p in Path('config/includes.chroot/usr/share/flexos').glob('*.json'):
+    json.loads(p.read_text(encoding='utf-8'))
+for p in [
+    Path('config/includes.chroot/usr/bin/flex'),
+    Path('config/includes.chroot/usr/bin/flex-center'),
+    Path('config/includes.chroot/usr/bin/flex-welcome'),
+    Path('config/includes.chroot/usr/lib/flexos/flexlib.py'),
+    Path('config/includes.chroot/usr/lib/flexos/flex-desktop-install'),
+    Path('config/includes.chroot/usr/lib/flexos/flex-package-profile-install'),
+    Path('config/includes.chroot/usr/lib/flexos/flex-profile-apply'),
+]:
+    py_compile.compile(str(p), doraise=True)
 PY2
-  ok "SVG and desktop-entry structure"
+  ok "SVG, desktop-entry, JSON and Python structure"
 fi
 
 if command -v python3 >/dev/null 2>&1; then
@@ -85,7 +107,9 @@ try:
     import yaml
 except Exception:
     raise SystemExit(0)
-for p in list(Path('.github').rglob('*.yml')) + list(Path('.github').rglob('*.yaml')):
+paths = list(Path('.github').rglob('*.yml')) + list(Path('.github').rglob('*.yaml'))
+paths += list(Path('config/includes.chroot/usr/share/flexos/calamares/modules').glob('*.conf'))
+for p in paths:
     yaml.safe_load(p.read_text(encoding='utf-8'))
 PY2
   ok "YAML (when PyYAML is available)"

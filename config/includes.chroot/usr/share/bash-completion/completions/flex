@@ -1,0 +1,21 @@
+_flex_complete() {
+    local cur prev
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    case "${COMP_CWORD}" in
+      1) COMPREPLY=( $(compgen -W "info hardware doctor profile package-profile desktop update center welcome" -- "$cur") ); return ;;
+    esac
+    case "${COMP_WORDS[1]}" in
+      profile)
+        if [[ ${COMP_CWORD} -eq 2 ]]; then COMPREPLY=( $(compgen -W "list show set" -- "$cur") );
+        elif [[ "${COMP_WORDS[2]}" == set ]]; then COMPREPLY=( $(compgen -W "balanced performance gaming battery creator minimal" -- "$cur") ); fi ;;
+      package-profile)
+        if [[ ${COMP_CWORD} -eq 2 ]]; then COMPREPLY=( $(compgen -W "list install" -- "$cur") );
+        elif [[ "${COMP_WORDS[2]}" == install ]]; then COMPREPLY=( $(compgen -W "minimal standard gaming developer creator" -- "$cur") ); fi ;;
+      desktop)
+        if [[ ${COMP_CWORD} -eq 2 ]]; then COMPREPLY=( $(compgen -W "list status install" -- "$cur") );
+        elif [[ "${COMP_WORDS[2]}" == install ]]; then COMPREPLY=( $(compgen -W "kde gnome cinnamon deepin xfce mate lxqt i3 sway hyprland budgie cosmic pantheon ukui regolith enlightenment trinity" -- "$cur") ); fi ;;
+    esac
+}
+complete -F _flex_complete flex

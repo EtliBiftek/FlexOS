@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Flex Center
+Name[tr]=Flex Center
+Comment=Manage FlexOS profiles, hardware and packages
+Comment[tr]=FlexOS profillerini, donanımını ve paketlerini yönet
+Exec=flex-center
+Icon=flexos-logo
+Terminal=false
+Categories=System;Settings;
+Keywords=flexos;profile;hardware;system;

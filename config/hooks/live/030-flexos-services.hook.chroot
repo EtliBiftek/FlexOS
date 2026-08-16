@@ -4,9 +4,15 @@ set -eu
 systemctl enable NetworkManager.service || true
 systemctl enable sddm.service || true
 systemctl enable bluetooth.service || true
+systemctl enable power-profiles-daemon.service || true
+systemctl enable flexos-profile.service || true
+systemctl enable flexos-identity.service || true
 systemctl set-default graphical.target || true
 
-# FlexOS boot splash. update-initramfs may be deferred by live-build; either is OK.
+mkdir -p /etc/flexos
+[ -e /etc/flexos/profile ] || printf 'balanced\n' > /etc/flexos/profile
+[ -e /etc/flexos/desktop-profile ] || printf 'kde\n' > /etc/flexos/desktop-profile
+
 if command -v plymouth-set-default-theme >/dev/null 2>&1; then
   plymouth-set-default-theme flexos || true
 fi
@@ -14,7 +20,5 @@ if command -v update-initramfs >/dev/null 2>&1; then
   update-initramfs -u -k all || true
 fi
 
-# Remove downloaded package payloads but keep package indexes: Calamares and
-# troubleshooting tools may need repository metadata while the live session runs.
 apt-get clean || true
 rm -f /var/cache/apt/archives/*.deb 2>/dev/null || true

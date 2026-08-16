@@ -1,0 +1,9 @@
+{
+  "name": "FlexOS",
+  "version": "0.1 Alpha",
+  "build_id": "0.1.0-alpha.1",
+  "creator": "Pifo",
+  "base": "Debian 13 (Trixie)",
+  "project": "https://github.com/EtliBiftek/FlexOS",
+  "support": "https://github.com/EtliBiftek/FlexOS/issues"
+}

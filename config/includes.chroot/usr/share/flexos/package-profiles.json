@@ -1,0 +1,45 @@
+{
+  "minimal": {
+    "name": "Minimal",
+    "packages": [],
+    "description": "Only the FlexOS base and selected desktop. No extra application bundle."
+  },
+  "standard": {
+    "name": "Standard",
+    "packages": [],
+    "description": "The normal FlexOS application set already included in the ISO."
+  },
+  "gaming": {
+    "name": "Gaming",
+    "packages": [
+      "gamemode",
+      "mangohud",
+      "vulkan-tools"
+    ],
+    "description": "Gaming performance and Vulkan monitoring tools. Internet required."
+  },
+  "developer": {
+    "name": "Developer",
+    "packages": [
+      "git",
+      "build-essential",
+      "cmake",
+      "ninja-build",
+      "pkg-config",
+      "python3-pip",
+      "python3-venv"
+    ],
+    "description": "Compilers, Git, CMake, Ninja and Python development tools. Internet required."
+  },
+  "creator": {
+    "name": "Creator",
+    "packages": [
+      "blender",
+      "kdenlive",
+      "krita",
+      "inkscape",
+      "audacity"
+    ],
+    "description": "Creative applications for video, graphics, 3D and audio. Internet required."
+  }
+}

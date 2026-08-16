@@ -1,8 +1,6 @@
 #!/bin/sh
 set -eu
 
-# Debian's settings package provides tested disk, EFI, source and cleanup logic.
-# Replace only its visible branding while keeping those backend modules intact.
 if [ -d /etc/calamares/branding/debian ]; then
   cp -f /usr/share/flexos/calamares/branding/branding.desc /etc/calamares/branding/debian/branding.desc
   cp -f /usr/share/flexos/calamares/branding/flexos-logo.svg /etc/calamares/branding/debian/flexos-logo.svg
@@ -10,13 +8,82 @@ if [ -d /etc/calamares/branding/debian ]; then
   cp -f /usr/share/flexos/calamares/branding/show.qml /etc/calamares/branding/debian/show.qml
 fi
 
-# Calamares 3.3 expects this setting explicitly. Older Debian settings may omit it.
-if [ -f /etc/calamares/settings.conf ] && ! grep -q '^hide-back-and-next-during-exec:' /etc/calamares/settings.conf; then
-  printf '\nhide-back-and-next-during-exec: false\n' >> /etc/calamares/settings.conf
-fi
+mkdir -p /etc/calamares/modules
+cp -f /usr/share/flexos/calamares/modules/*.conf /etc/calamares/modules/
 
-# Avoid Debian-branded launcher duplicates in the live desktop/application menu.
+python3 - <<'PY'
+from pathlib import Path
+p=Path("/etc/calamares/settings.conf")
+text=p.read_text()
+if "hide-back-and-next-during-exec:" not in text:
+    text += "\nhide-back-and-next-during-exec: false\n"
+
+instance_items = """  - id: desktop
+    module: packagechooser
+    config: packagechooser-desktop.conf
+  - id: packageprofile
+    module: packagechooser
+    config: packagechooser-flexpackages.conf
+  - id: flexdesktop
+    module: contextualprocess
+    config: contextualprocess-flexdesktop.conf
+    weight: 6
+  - id: flexpackages
+    module: contextualprocess
+    config: contextualprocess-flexpackages.conf
+    weight: 4
+"""
+
+if "id: desktop" not in text:
+    seq = text.find("sequence:")
+    if seq < 0:
+        raise SystemExit("Calamares settings.conf has no sequence")
+    before, after = text[:seq], text[seq:]
+    if "instances:" in before:
+        before = before.rstrip() + "\n" + instance_items + "\n"
+    else:
+        before = before.rstrip() + "\n\ninstances:\n" + instance_items + "\n"
+    text = before + after
+
+lines=text.splitlines()
+if not any("packagechooser@desktop" in x for x in lines):
+    for i,line in enumerate(lines):
+        if line.strip() == "- partition":
+            indent=line[:len(line)-len(line.lstrip())]
+            lines[i+1:i+1] = [
+                indent+"- packagechooser@desktop",
+                indent+"- packagechooser@packageprofile",
+            ]
+            break
+
+if not any("contextualprocess@flexdesktop" in x for x in lines):
+    inserted=False
+    # Network-selected desktops need the final Debian sources, not the temporary live-media source.
+    for i,line in enumerate(lines):
+        if line.strip() == "- sources-final":
+            indent=line[:len(line)-len(line.lstrip())]
+            lines[i+1:i+1] = [
+                indent+"- contextualprocess@flexdesktop",
+                indent+"- contextualprocess@flexpackages",
+            ]
+            inserted=True
+            break
+    if not inserted:
+        for i,line in enumerate(lines):
+            if line.strip() == "- umount":
+                indent=line[:len(line)-len(line.lstrip())]
+                lines[i:i] = [
+                    indent+"- contextualprocess@flexdesktop",
+                    indent+"- contextualprocess@flexpackages",
+                ]
+                break
+
+p.write_text("\n".join(lines).rstrip()+"\n")
+PY
+
 rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
 rm -f /usr/share/applications/calamares-install-debian.desktop
 
-chmod 0755 /usr/bin/flexos-installer /usr/lib/flexos/flexos-first-login
+chmod 0755 /usr/bin/flexos-installer /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome
+chmod 0755 /usr/lib/flexos/flexos-first-login /usr/lib/flexos/flex-profile-apply
+chmod 0755 /usr/lib/flexos/flex-desktop-install /usr/lib/flexos/flex-package-profile-install

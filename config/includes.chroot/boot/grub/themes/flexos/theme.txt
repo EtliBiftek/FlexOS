@@ -20,5 +20,5 @@ terminal-border: "0"
   width = 60%
   align = "center"
   color = "#777a80"
-  text = "Booting in %d seconds"
+  text = "FlexOS is starting in %d seconds"
 }

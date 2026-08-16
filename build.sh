@@ -20,8 +20,6 @@ done
 
 ./scripts/validate.sh
 
-# live-build stores generated configuration below config/. Remove it so every
-# build is reproducible from the repository-owned inputs and the current lb version.
 lb clean --purge || true
 rm -rf config/binary config/bootstrap config/bootloaders config/chroot config/common config/source
 rm -f FlexOS-*.iso FlexOS-*.iso.sha256 build.log
@@ -48,13 +46,20 @@ lb config noauto \
   --iso-publisher "Pifo; https://github.com/EtliBiftek/FlexOS" \
   --iso-volume "FLEXOS_$(echo "$VERSION" | tr '.-' '__' | tr '[:lower:]' '[:upper:]')"
 
-# Keep the boot menu layout compatible with the live-build version installed on
-# the builder, but replace its splash artwork with FlexOS artwork.
 if [[ -d /usr/share/live/build/bootloaders ]]; then
   cp -a /usr/share/live/build/bootloaders config/bootloaders
   while IFS= read -r -d '' splash; do
     cp -f branding/boot-splash.svg "$splash"
   done < <(find config/bootloaders -type f -name 'splash.svg' -print0)
+
+  # Remove Debian live-build user-facing identity from boot menus.
+  while IFS= read -r -d '' f; do
+    sed -i \
+      -e 's/Debian GNU\/Linux/FlexOS/g' \
+      -e 's/Debian Live/FlexOS Live/g' \
+      -e 's/Debian GNU/FlexOS/g' \
+      "$f" || true
+  done < <(find config/bootloaders -type f \( -name '*.cfg' -o -name '*.conf' -o -name '*.txt' \) -print0)
 fi
 
 lb build 2>&1 | tee build.log
@@ -67,5 +72,4 @@ fi
 
 mv "$iso" "$OUTPUT"
 sha256sum "$OUTPUT" > "$OUTPUT.sha256"
-
 printf '\nBuilt: %s\nChecksum: %s.sha256\n' "$OUTPUT" "$OUTPUT"
