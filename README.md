@@ -1,61 +1,76 @@
 # FlexOS
 
-**FlexOS** is a clean, minimal, open-source Linux distribution created by **Pifo**. It is based on Debian 13 (Trixie), uses KDE Plasma 6, and ships a graphical Calamares installer.
+**FlexOS** is an open-source Debian 13 (Trixie) based desktop Linux distribution created by **Pifo**.
+FlexOS uses **KDE Plasma 6 as its only supported desktop** and provides its own management, recovery,
+update and first-run tools.
 
-> **Current status:** `0.1.0-alpha.1` — development preview. Do not use this alpha as your only operating system or on a machine without backups.
+> Current source status: **0.5.0-beta.1-dev**. This is beta-development source, not a declared stable release.
 
-## Identity
+## FlexOS identity
 
-- **Name:** FlexOS
-- **Creator:** Pifo
-- **Base:** Debian 13 (Trixie)
-- **Desktop:** KDE Plasma 6
-- **Installer:** Calamares
-- **Architecture:** amd64 / x86_64
-- **Official project:** https://github.com/EtliBiftek/FlexOS
-- **Downloads:** GitHub Releases
-- **Support / bugs:** GitHub Issues
+- Creator: Pifo
+- Base: Debian 13 (Trixie)
+- Desktop: KDE Plasma 6
+- Installer: Calamares
+- Architecture: amd64 / x86_64
+- Package manager: APT / dpkg
+- FlexOS-authored component updates: `.deb` packages + `flex-self-update`
+- Project / downloads / support: GitHub (`EtliBiftek/FlexOS`)
 
-There is intentionally no separate website yet. The GitHub repository is the canonical source for source code, downloads, documentation and support.
+FlexOS is based on Debian but is not produced or endorsed by the Debian Project or KDE.
 
-## Design goals
+## FlexOS System Suite
 
-- A clean install with no office suite or large application bundle
-- Modern KDE Plasma 6 desktop with Wayland and X11 sessions
-- Dark grey / black FlexOS visual identity
-- Live session before installation
-- Graphical disk/user/locale setup through Calamares
-- BIOS and UEFI boot support
-- Useful firmware for common AMD/Intel/Wi-Fi hardware
-- Reproducible-ish, reviewable ISO build configuration using Debian `live-build`
+The 0.5 beta-development tree includes:
 
-## Included desktop software
+- Flex Center
+- Flex Welcome / OOBE
+- Flex Profiles
+- Flex Update Center
+- Flex Driver Manager
+- Flex Snapshot (Btrfs + Snapper)
+- Flex Recovery, including GRUB recovery entries
+- Flex Performance (power profiles, zRAM, swappiness)
+- Flex Hardware Recommendations
+- Flex App Installer (APT and optional Flatpak/Flathub)
+- Flex Cleanup
+- Flex Boot & Kernel Manager
+- Flex Logs
+- Flex Backup and local-folder Flex Sync
+- Flex Privacy and Flex Security
+- Flex System Report
+- FlexOS component package/self-update pipeline
 
-Dolphin, Konsole, Kate, Ark, Spectacle, Gwenview, Okular, Firefox ESR, System Monitor and the core KDE settings tools. Wi-Fi, Bluetooth and PipeWire audio are included.
+## Build
 
-## Build on Debian 13
+On Debian 13:
 
 ```bash
 sudo apt update
-sudo apt install -y live-build debootstrap squashfs-tools xorriso isolinux syslinux-common grub-efi-amd64-bin grub-efi-amd64-signed shim-signed grub-pc-bin dosfstools mtools memtest86+
+sudo apt install -y live-build debootstrap squashfs-tools xorriso isolinux \
+  syslinux-common grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
+  grub-pc-bin dosfstools mtools memtest86+ ca-certificates
 sudo ./build.sh
 ```
 
-The build first validates the project and package selection. The result is named like:
+GitHub Actions is the primary reproducible build path for development releases.
 
-```text
-FlexOS-0.1.0-alpha.1-amd64.iso
-FlexOS-0.1.0-alpha.1-amd64.iso.sha256
-```
+## Beta release policy
 
-You can also develop from Windows without installing Linux locally: push the source tree to GitHub and run **Build FlexOS ISO** in GitHub Actions. Successful `main` builds replace the `dev-latest` prerelease; version tags create versioned releases. Oversized ISOs are automatically split into GitHub-compatible parts with reconstruction instructions.
+The repository contains a machine-readable test matrix in `qa/test-matrix.json`.
+A `v0.5...` tag is blocked by CI unless required manual tests are marked as passed and all
+automated checks succeed.
 
-See [`docs/INSTALL.md`](docs/INSTALL.md) for installation, [`docs/VERIFY.md`](docs/VERIFY.md) for checksum verification, and [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) before testing.
+See:
 
-## Before real-hardware testing
+- `docs/BETA_EXIT_CRITERIA.md`
+- `docs/BETA_TEST_MATRIX.md`
+- `docs/INSTALL.md`
+- `docs/RECOVERY.md`
+- `docs/UPDATES.md`
+- `docs/KNOWN_ISSUES.md`
 
-Use a VM first. This is an alpha installer that can repartition disks. Keep backups. Secure Boot compatibility is not considered guaranteed until it is explicitly verified on the published ISO.
+## Warning
 
-## License
-
-FlexOS-authored project files are MIT licensed unless a file states otherwise. Software installed into the generated ISO remains under each upstream project's own license. FlexOS is based on Debian but is not produced or endorsed by the Debian Project or KDE.
+0.5 beta-development builds are for testing. Keep backups and do not use a beta build as the
+only copy of important data until its release gates are complete.

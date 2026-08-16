@@ -1,0 +1,102 @@
+{
+  "flexos-base": {
+    "description": "FlexOS distribution identity and base integration",
+    "depends": "bash, systemd",
+    "paths": [
+      "etc/flexos-release",
+      "etc/apt/apt.conf.d/99flexos-identity",
+      "usr/bin/flexos-info",
+      "usr/lib/flexos/flex-identity-apply",
+      "usr/lib/systemd/system/flexos-identity.service",
+      "usr/share/flexos/identity.json",
+      "usr/share/flexos/identity",
+      "usr/share/flexos/release-info",
+      "usr/share/doc/flexos"
+    ]
+  },
+  "flexos-branding": {
+    "description": "FlexOS KDE, GRUB, SDDM, icon and wallpaper branding",
+    "depends": "flexos-base, grub-common, sddm, plasma-workspace",
+    "paths": [
+      "boot/grub/themes/flexos",
+      "etc/default/grub.d/60-flexos.cfg",
+      "etc/sddm.conf.d/10-flexos.conf",
+      "usr/lib/flexos/flex-branding-apply",
+      "usr/share/icons/hicolor/scalable/apps/flexos-logo.svg",
+      "usr/share/pixmaps/flexos-logo.svg",
+      "usr/share/sddm/themes/breeze/theme.conf.user",
+      "usr/share/wallpapers/FlexOS",
+      "etc/skel/.local/share/konsole/FlexOS.profile",
+      "etc/skel/.config/konsolerc",
+      "etc/skel/.config/klipperrc"
+    ]
+  },
+  "flexos-center": {
+    "description": "Flex Center graphical system management application",
+    "depends": "flexos-base, flexos-tools, python3, python3-pyqt6, pkexec",
+    "paths": [
+      "usr/bin/flex-center",
+      "usr/share/applications/flex-center.desktop",
+      "usr/share/flexos/apps.json"
+    ]
+  },
+  "flexos-welcome": {
+    "description": "Flex Welcome first-run setup experience",
+    "depends": "flexos-center, python3, python3-pyqt6",
+    "paths": [
+      "usr/bin/flex-welcome",
+      "usr/share/applications/flex-welcome.desktop",
+      "etc/xdg/autostart/flexos-first-login.desktop",
+      "usr/lib/flexos/flexos-first-login"
+    ]
+  },
+  "flexos-tools": {
+    "description": "FlexOS CLI, update, recovery, snapshot and diagnostic tools",
+    "depends": "flexos-base, python3, python3-pyqt6, whiptail, snapper, ufw, flatpak, rsync, curl, power-profiles-daemon, systemd-zram-generator, mokutil, lm-sensors, network-manager, initramfs-tools, grub-common",
+    "paths": [
+      "usr/bin/flex",
+      "usr/bin/flex-system-report",
+      "usr/bin/flex-beta-check",
+      "usr/bin/flex-self-update",
+      "usr/lib/flexos/flex-admin",
+      "usr/lib/flexos/flexsuite.py",
+      "usr/lib/flexos/flexlib.py",
+      "usr/lib/flexos/flex-package-profile-install",
+      "usr/lib/flexos/flex-profile-apply",
+      "usr/lib/flexos/flex-snapshot-pre",
+      "usr/lib/flexos/flex-recovery-console",
+      "usr/lib/systemd/system/flexos-profile.service",
+      "usr/lib/systemd/system/flexos-recovery.target",
+      "usr/lib/systemd/system/flexos-recovery.service",
+      "usr/lib/systemd/system/flexos-ci-smoke.service",
+      "etc/apt/apt.conf.d/80flexos-snapshot",
+      "etc/grub.d/41_flexos_recovery",
+      "usr/share/bash-completion/completions/flex",
+      "usr/share/applications/flex-recovery.desktop",
+      "usr/share/applications/flex-system-report.desktop",
+      "usr/share/flexos/package-profiles.json",
+      "usr/share/flexos/desktop-profiles.json"
+    ]
+  },
+  "flexos-calamares": {
+    "description": "FlexOS Calamares installer integration and branding",
+    "depends": "flexos-base, flexos-tools, calamares, calamares-settings-debian, squashfs-tools, cracklib-runtime",
+    "paths": [
+      "usr/bin/flexos-installer",
+      "usr/share/applications/flexos-installer.desktop",
+      "usr/share/flexos/calamares/branding",
+      "usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf",
+      "usr/share/flexos/calamares/modules/contextualprocess-flexpackages.conf",
+      "usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf",
+      "etc/flexos/calamares-root-config",
+      "usr/lib/flexos/flex-postinstall"
+    ]
+  },
+  "flexos-plymouth": {
+    "description": "FlexOS Plymouth boot splash",
+    "depends": "flexos-branding, plymouth, initramfs-tools",
+    "paths": [
+      "usr/share/plymouth/themes/flexos"
+    ]
+  }
+}

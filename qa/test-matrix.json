@@ -1,0 +1,390 @@
+{
+  "schema": 1,
+  "release": "0.5.0-beta.1",
+  "tests": [
+    {
+      "id": "ci-source-validation",
+      "area": "CI",
+      "required": true,
+      "automated": true,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "ci-package-build",
+      "area": "CI",
+      "required": true,
+      "automated": true,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "ci-iso-structure",
+      "area": "CI",
+      "required": true,
+      "automated": true,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "ci-live-kernel-boot",
+      "area": "CI",
+      "required": true,
+      "automated": true,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-uefi-ext4-install",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-bios-ext4-install",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-uefi-btrfs-install",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-manual-partition",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-luks-install",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-reboot-loop-20",
+      "area": "Boot",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-shutdown-loop-10",
+      "area": "Boot",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-recovery-grub",
+      "area": "Recovery",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-btrfs-snapshot",
+      "area": "Snapshot",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-btrfs-rollback",
+      "area": "Snapshot",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-flex-welcome",
+      "area": "UI",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-flex-center",
+      "area": "UI",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-component-self-update",
+      "area": "Update",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-nvidia-install",
+      "area": "Driver",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-nvidia-remove-recover",
+      "area": "Driver",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-wifi",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-bluetooth",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-audio",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-suspend-resume",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "secureboot-observation",
+      "area": "Security",
+      "required": false,
+      "automated": false,
+      "status": "pending",
+      "notes": "Not a 0.5 guarantee unless explicitly passed."
+    },
+    {
+      "id": "vm-auto-empty-disk",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-existing-partitions-preserved",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-installer-10-clean-installs",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-password-dictionary",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "Verify cracklib password validation loads correctly."
+    },
+    {
+      "id": "vm-installer-failure-log",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "Force/test a recoverable installer error and verify FlexOS-Installer.log is exposed."
+    },
+    {
+      "id": "vm-no-live-user-residue",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "Installed SDDM must not autologin the live user flex."
+    },
+    {
+      "id": "vm-grub-theme-clean",
+      "area": "Boot",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "No pixmap/theme parse error."
+    },
+    {
+      "id": "vm-plymouth-boot-reboot-shutdown",
+      "area": "Boot",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "No static Starting/Stopping regression."
+    },
+    {
+      "id": "vm-qemu-installed-boot",
+      "area": "Virtualization",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-vmware-installed-boot",
+      "area": "Virtualization",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-system-update",
+      "area": "Update",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-update-pre-snapshot",
+      "area": "Update",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "On Btrfs + Snapper."
+    },
+    {
+      "id": "vm-backports-kernel-update",
+      "area": "Kernel",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-flatpak-app-install",
+      "area": "Applications",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-firewall-security",
+      "area": "Security",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "branding-flexos-consistency",
+      "area": "Branding",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "User-facing boot/login/desktop/installer branding should be FlexOS; technical Debian base disclosure remains in system information/docs."
+    },
+    {
+      "id": "hw-intel-graphics",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-amd-graphics",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-intel-microcode",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-amd-microcode",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-ethernet",
+      "area": "Hardware",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-nvme",
+      "area": "Storage",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "hw-sata",
+      "area": "Storage",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "vm-locale-keyboard-timezone",
+      "area": "Installer",
+      "required": true,
+      "automated": false,
+      "status": "pending",
+      "notes": "Verify installed locale, keyboard layout and timezone/clock match installer selections."
+    }
+  ]
+}

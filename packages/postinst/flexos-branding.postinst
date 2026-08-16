@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+if [ -x /usr/lib/flexos/flex-branding-apply ]; then
+  /usr/lib/flexos/flex-branding-apply >/dev/null 2>&1 || true
+fi
+command -v update-grub >/dev/null 2>&1 && update-grub >/dev/null 2>&1 || true
+exit 0

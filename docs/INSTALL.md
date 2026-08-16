@@ -1,15 +1,33 @@
 # Installing FlexOS
 
-> FlexOS 0.1 is alpha software. Test in a VM first and back up real hardware.
+FlexOS 0.5 beta-development uses Calamares and KDE Plasma 6.
 
-1. Download the newest ISO (or numbered ISO parts) from this repository's GitHub Releases page.
-2. If the release is split, reconstruct the ISO using `REASSEMBLE.txt` from the same release.
-3. Verify the SHA256 checksum.
-4. Write the ISO to a USB drive with a raw-image capable tool, or attach it to a VM.
-5. Boot FlexOS and try the live desktop.
-6. Open **Install FlexOS**.
-7. In Calamares, choose language, keyboard, timezone, target disk/partitions and user credentials.
-8. Review the partition summary carefully before confirming installation.
-9. Reboot after Calamares finishes and remove the installation media.
+## Before installation
 
-The installer can modify or erase partitions. FlexOS cannot protect data that was not backed up before installation.
+- Back up important data.
+- Verify the ISO SHA256.
+- Test the ISO in a VM before real hardware.
+- Do not assume Secure Boot compatibility until the exact ISO has been tested.
+
+## Filesystem choice
+
+The beta installer exposes:
+
+- **ext4** — conservative default
+- **Btrfs** — enables Flex Snapshot / Snapper rollback after installation
+
+Disk encryption remains available through Calamares where supported by the selected partitioning mode.
+
+## After installation
+
+FlexOS post-install finalization:
+
+- removes live-session SDDM autologin configuration
+- records KDE as the FlexOS desktop
+- configures Snapper automatically when `/` is Btrfs
+- enables core FlexOS services
+- regenerates initramfs and GRUB, including FlexOS Recovery entries
+
+At first login, Flex Welcome starts the OOBE.
+
+For beta QA, run `flex beta-check` or create a Flex System Report from Flex Center.

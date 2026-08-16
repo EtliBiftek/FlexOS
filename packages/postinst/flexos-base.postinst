@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable flexos-identity.service >/dev/null 2>&1 || true
+/usr/lib/flexos/flex-identity-apply >/dev/null 2>&1 || true
+exit 0

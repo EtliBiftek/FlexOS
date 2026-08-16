@@ -1,0 +1,20 @@
+{
+  "artifact": "FlexOS 0.5 Beta Implementation Pack",
+  "source_version": "0.5.0-beta.1-dev",
+  "local_validation": {
+    "merged_source_validation": "pass",
+    "workflow_yaml_parse": "pass",
+    "component_deb_build": "pass",
+    "component_deb_count": 7,
+    "component_file_ownership_collisions": 0,
+    "beta_promotion_simulation": "pass",
+    "tag_version_guard_simulation": "pass",
+    "strict_release_gate": "blocked_as_intended_until_manual_QA"
+  },
+  "not_performed_locally": [
+    "GitHub Actions Debian live-build ISO build",
+    "QEMU boot of the newly generated beta ISO",
+    "Calamares full installation of the newly generated beta ISO",
+    "real hardware tests"
+  ]
+}
