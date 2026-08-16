@@ -82,6 +82,7 @@ memtest86+
 calamares
 calamares-settings-debian
 squashfs-tools
+cracklib-runtime
 
 # Firmware and CPU microcode
 firmware-linux-free
