@@ -1,6 +1,20 @@
 #!/bin/sh
 set -eu
 
+# GitHub/web uploads may store scripts as 0644. Normalize permissions inside
+# the image before any FlexOS helper is executed.
+chmod 0755 \
+  /usr/bin/flex \
+  /usr/bin/flex-center \
+  /usr/bin/flex-welcome \
+  /usr/bin/flexos-info \
+  /usr/bin/flexos-installer \
+  /usr/lib/flexos/flex-desktop-install \
+  /usr/lib/flexos/flex-identity-apply \
+  /usr/lib/flexos/flex-package-profile-install \
+  /usr/lib/flexos/flex-profile-apply \
+  /usr/lib/flexos/flexos-first-login
+
 printf 'flexos\n' > /etc/hostname
 cat > /etc/hosts <<'EOF'
 127.0.0.1 localhost
