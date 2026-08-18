@@ -12,7 +12,11 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 xorriso -indev "$ISO" -report_el_torito plain >"$tmp/el-torito.txt" 2>&1
-xorriso -indev "$ISO" -find / -maxdepth 3 -type f -print >"$tmp/iso-files.txt" 2>&1
+if ! xorriso -indev "$ISO" -find / -maxdepth 3 -type f -exec lsdl -- >"$tmp/iso-files.txt" 2>&1; then
+  echo "ERROR: xorriso failed while listing ISO files:"
+  cat "$tmp/iso-files.txt"
+  exit 1
+fi
 
 grep -qi 'BIOS' "$tmp/el-torito.txt" || { echo "ERROR: BIOS boot entry not detected." >&2; exit 1; }
 grep -qi 'UEFI\|EFI' "$tmp/el-torito.txt" || { echo "ERROR: EFI boot entry not detected." >&2; exit 1; }
