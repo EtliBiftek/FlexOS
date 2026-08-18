@@ -82,6 +82,7 @@
     "description": "FlexOS Calamares installer integration and branding",
     "depends": "flexos-base, flexos-tools, calamares, calamares-settings-debian, squashfs-tools, cracklib-runtime",
     "paths": [
+      "usr/share/flexos/calamares/modules/mount.conf",
       "usr/bin/flexos-installer",
       "usr/share/applications/flexos-installer.desktop",
       "usr/share/flexos/calamares/branding",
