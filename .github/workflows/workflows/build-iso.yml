@@ -86,7 +86,7 @@ jobs:
               DEBIAN_FRONTEND=noninteractive apt-get install -y \
                 live-build debootstrap squashfs-tools xorriso isolinux \
                 syslinux-common grub-efi-amd64-bin grub-efi-amd64-signed shim-signed grub-pc-bin dosfstools \
-                mtools memtest86+ ca-certificates python3
+                mtools memtest86+ ca-certificates python3 
               ./scripts/check-package-list.sh
               ./build.sh
             '
