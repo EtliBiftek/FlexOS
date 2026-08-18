@@ -9,6 +9,7 @@ if [ -d /etc/calamares/branding/debian ]; then
 fi
 
 mkdir -p /etc/calamares/modules
+cp -f /usr/share/flexos/calamares/modules/mount.conf /etc/calamares/modules/mount.conf
 cp -f /usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf /etc/calamares/modules/
 cp -f /usr/share/flexos/calamares/modules/contextualprocess-flexpackages.conf /etc/calamares/modules/
 cp -f /usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf /etc/calamares/modules/
