@@ -65,6 +65,7 @@
       "usr/lib/flexos/flex-profile-apply",
       "usr/lib/flexos/flex-snapshot-pre",
       "usr/lib/flexos/flex-recovery-console",
+      "usr/lib/flexos/flex-postinstall",
       "usr/lib/systemd/system/flexos-profile.service",
       "usr/lib/systemd/system/flexos-recovery.target",
       "usr/lib/systemd/system/flexos-recovery.service",
@@ -89,8 +90,7 @@
       "usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf",
       "usr/share/flexos/calamares/modules/contextualprocess-flexpackages.conf",
       "usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf",
-      "etc/flexos/calamares-root-config",
-      "usr/lib/flexos/flex-postinstall"
+      "etc/flexos/calamares-root-config"
     ]
   },
   "flexos-plymouth": {
