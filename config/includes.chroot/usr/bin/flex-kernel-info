@@ -1,0 +1,53 @@
+#!/bin/sh
+set -u
+
+kernel="$(uname -r 2>/dev/null || echo unknown)"
+printf 'Active kernel: %s\n' "$kernel"
+
+case "$kernel" in
+  *cachy*|*flexos-cachy*) printf 'CachyOS-derived: yes\n' ;;
+  *) printf 'CachyOS-derived: no\n' ;;
+esac
+
+if [ -d /sys/kernel/sched_ext ]; then
+  printf 'sched_ext: available\n'
+else
+  printf 'sched_ext: unavailable\n'
+fi
+
+if grep -qw ntsync /proc/modules 2>/dev/null; then
+  printf 'NTSYNC: loaded\n'
+elif command -v modinfo >/dev/null 2>&1 && modinfo ntsync >/dev/null 2>&1; then
+  printf 'NTSYNC: available, not loaded\n'
+else
+  printf 'NTSYNC: unavailable\n'
+fi
+
+if command -v sysctl >/dev/null 2>&1; then
+  printf 'TCP congestion control: %s\n' "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+  printf 'Default qdisc: %s\n' "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+fi
+
+if command -v swapon >/dev/null 2>&1 && swapon --show=NAME --noheadings 2>/dev/null | grep -q zram; then
+  printf 'ZRAM: active\n'
+else
+  printf 'ZRAM: inactive\n'
+fi
+
+printf '\nInstalled kernel images:\n'
+if command -v dpkg-query >/dev/null 2>&1; then
+  dpkg-query -W -f='  ${Package} ${Version}\n' 'linux-image-*' 2>/dev/null | grep -v '<none>' || true
+else
+  find /boot -maxdepth 1 -name 'vmlinuz-*' -printf '  %f\n' 2>/dev/null || true
+fi
+
+if dpkg-query -W -f='${db:Status-Abbrev}' linux-image-amd64 2>/dev/null | grep -q '^ii'; then
+  printf '\nDebian fallback meta-package: installed\n'
+else
+  printf '\nDebian fallback meta-package: not installed\n'
+fi
+
+[ -r /run/flexos/performance-status ] && {
+  printf '\nBoot capability state:\n'
+  sed 's/^/  /' /run/flexos/performance-status
+}
