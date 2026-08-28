@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -u
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: flex-game-performance <command> [args...]" >&2
+  exit 2
+fi
+
+if ! command -v powerprofilesctl >/dev/null 2>&1; then
+  exec "$@"
+fi
+
+if ! powerprofilesctl list 2>/dev/null | grep -q 'performance:'; then
+  exec "$@"
+fi
+
+reason="Launched with FlexOS game performance utility"
+if [[ -n "${GAME_PERFORMANCE_SCREENSAVER_ON:-}" ]]; then
+  exec powerprofilesctl launch -p performance -r "$reason" -- "$@"
+else
+  exec systemd-inhibit --why "FlexOS game performance is running" \
+    powerprofilesctl launch -p performance -r "$reason" -- "$@"
+fi
