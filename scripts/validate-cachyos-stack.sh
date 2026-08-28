@@ -18,6 +18,9 @@ required=(
   config/includes.chroot/usr/lib/systemd/system/flexos-performance.service
   config/includes.chroot/usr/bin/flex-kernel-info
   config/includes.chroot/usr/bin/flex-game-performance
+  config/includes.chroot/usr/bin/flex-hwd
+  config/includes.chroot/usr/lib/flexos/flex-snapshot-pre
+  config/includes.chroot/usr/lib/flexos/flex-snapshot-post
   packages/postinst/flexos-performance.postinst
 )
 
@@ -29,8 +32,10 @@ bash -n scripts/build-cachyos-kernel.sh
 bash -n config/includes.chroot/usr/bin/flex-game-performance
 sh -n config/includes.chroot/usr/lib/flexos/flex-performance-apply
 sh -n config/includes.chroot/usr/bin/flex-kernel-info
+sh -n config/includes.chroot/usr/lib/flexos/flex-snapshot-pre
+sh -n config/includes.chroot/usr/lib/flexos/flex-snapshot-post
 sh -n packages/postinst/flexos-performance.postinst
-python3 -m py_compile scripts/fetch-cachyos-kernel.py
+python3 -m py_compile scripts/fetch-cachyos-kernel.py config/includes.chroot/usr/bin/flex-hwd
 
 grep -qx 'linux-image-amd64' config/package-lists/flexos.list.chroot || {
   echo '[FAIL] Debian fallback kernel meta-package must remain installed.' >&2
@@ -46,6 +51,8 @@ grep -q '^compression-algorithm = zstd$' config/includes.chroot/etc/systemd/zram
 grep -q '^swap-priority = 100$' config/includes.chroot/etc/systemd/zram-generator.conf
 grep -q '^vm.swappiness = 100$' config/includes.chroot/etc/sysctl.d/70-flexos-performance.conf
 grep -q '^kernel.nmi_watchdog = 0$' config/includes.chroot/etc/sysctl.d/70-flexos-performance.conf
+grep -q '^DPkg::Pre-Invoke' config/includes.chroot/etc/apt/apt.conf.d/80flexos-snapshot
+grep -q '^DPkg::Post-Invoke' config/includes.chroot/etc/apt/apt.conf.d/80flexos-snapshot
 
 python3 - <<'PY'
 import json
@@ -62,6 +69,15 @@ required={
     'usr/bin/flex-game-performance',
 }
 assert required.issubset(set(p['paths'])), 'flexos-performance package map incomplete'
+
+tools=m.get('flexos-tools')
+assert tools, 'flexos-tools package missing'
+required_tools={
+    'usr/bin/flex-hwd',
+    'usr/lib/flexos/flex-snapshot-pre',
+    'usr/lib/flexos/flex-snapshot-post',
+}
+assert required_tools.issubset(set(tools['paths'])), 'flexos-tools CachyOS integration paths incomplete'
 PY
 
 grep -q 'flexos-performance.service' config/hooks/live/030-flexos-services.hook.chroot
