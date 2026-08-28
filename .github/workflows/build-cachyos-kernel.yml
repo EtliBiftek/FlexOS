@@ -1,0 +1,90 @@
+name: Build FlexOS CachyOS Kernel
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flexos-cachyos-kernel
+  cancel-in-progress: true
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize executable permissions
+        run: chmod +x scripts/build-cachyos-kernel.sh
+
+      - name: Reclaim runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          df -h /
+
+      - name: Build Debian kernel packages
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            debian:13 \
+            bash -lc '
+              set -eux
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                build-essential bc bison flex libssl-dev libelf-dev libdw-dev dwarves \
+                libncurses-dev rsync cpio kmod fakeroot dpkg-dev debhelper pkg-config \
+                clang llvm lld rustc bindgen libclang-dev zstd xz-utils ca-certificates \
+                curl git python3
+              ./scripts/build-cachyos-kernel.sh dist/kernel
+            '
+
+      - name: Validate kernel package set
+        run: |
+          set -eux
+          test -s dist/kernel/KERNEL_INFO
+          test -s dist/kernel/SHA256SUMS
+          compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null
+          compgen -G 'dist/kernel/linux-headers-*.deb' >/dev/null
+          (cd dist/kernel && sha256sum -c SHA256SUMS)
+          dpkg-deb --info dist/kernel/linux-image-*.deb | head -n 80
+
+      - name: Keep kernel packages as CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlexOS-CachyOS-kernel-${{ github.sha }}
+          path: dist/kernel/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish rolling kernel release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -f kernel-latest "$GITHUB_SHA"
+          git push --force origin refs/tags/kernel-latest
+
+          if gh release view kernel-latest >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              [[ -n "$asset" ]] && gh release delete-asset kernel-latest "$asset" -y
+            done < <(gh release view kernel-latest --json assets --jq '.assets[].name')
+            gh release edit kernel-latest \
+              --title "FlexOS CachyOS Kernel" \
+              --prerelease \
+              --notes-file dist/kernel/KERNEL_INFO
+          else
+            gh release create kernel-latest \
+              --title "FlexOS CachyOS Kernel" \
+              --prerelease \
+              --notes-file dist/kernel/KERNEL_INFO
+          fi
+
+          gh release upload kernel-latest dist/kernel/* --clobber
