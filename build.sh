@@ -55,6 +55,10 @@ if ! compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null 2>&1 && \
   python3 scripts/fetch-cachyos-kernel.py dist/kernel || true
 fi
 
+if [[ -f dist/kernel/SHA256SUMS ]]; then
+  (cd dist/kernel && sha256sum -c SHA256SUMS)
+fi
+
 # A rolling CachyOS-derived kernel is built by build-cachyos-kernel.yml. Keep
 # linux-image-amd64 in the package list as a fully installed fallback kernel.
 CACHY_KERNEL=0
