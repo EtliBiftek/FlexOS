@@ -47,10 +47,15 @@ python3 scripts/build-flexos-packages.py \
 
 echo "FlexOS component package version embedded in ISO: $PACKAGE_VERSION"
 
-# A rolling CachyOS-derived kernel is built by build-cachyos-kernel.yml and
-# downloaded by the ISO workflow. Keep linux-image-amd64 in the package list as
-# a fully installed fallback kernel. Local/offline builds remain possible when
-# no custom kernel artifact is available.
+# Try the rolling kernel release automatically. Public GitHub release assets do
+# not require credentials, so the same path works in CI and ordinary builds.
+if ! compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null 2>&1 && \
+   [[ "${FLEXOS_FETCH_CACHY_KERNEL:-1}" != "0" ]]; then
+  python3 scripts/fetch-cachyos-kernel.py dist/kernel || true
+fi
+
+# A rolling CachyOS-derived kernel is built by build-cachyos-kernel.yml. Keep
+# linux-image-amd64 in the package list as a fully installed fallback kernel.
 CACHY_KERNEL=0
 if [[ -d dist/kernel ]] && compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null; then
   cp -f dist/kernel/linux-image-*.deb config/packages.chroot/
