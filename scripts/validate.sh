@@ -10,6 +10,9 @@ ok(){ echo "[ OK ] $*"; }
 
 required=(
   VERSION build.sh clean.sh README.md LICENSE CHANGELOG.md
+  .github/workflows/build-iso.yml
+  .github/workflows/build-packages.yml
+  .github/ISSUE_TEMPLATE/beta-bug-report.yml
   branding/boot-splash.svg
   config/package-lists/flexos.list.chroot
   config/includes.chroot/etc/os-release
@@ -56,6 +59,19 @@ for f in "${required[@]}"; do
   [[ -e "$f" ]] || fail "Missing $f"
 done
 [[ $errors -eq 0 ]] && ok "required beta project files"
+
+nested_workflows="$(find .github/workflows -mindepth 2 -type f \( -name '*.yml' -o -name '*.yaml' \) -print 2>/dev/null || true)"
+if [[ -n "$nested_workflows" ]]; then
+  fail "GitHub ignores nested workflow files; move them directly under .github/workflows/: $nested_workflows"
+else
+  ok "GitHub workflow layout"
+fi
+
+if [[ -d .github/workflows/ISSUE_TEMPLATE ]]; then
+  fail "Issue templates must live under .github/ISSUE_TEMPLATE, not .github/workflows/ISSUE_TEMPLATE"
+else
+  ok "GitHub issue template layout"
+fi
 
 for f in \
   build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot \
@@ -175,7 +191,9 @@ try:
 except Exception:
     raise SystemExit(0)
 paths=list(Path(".github/workflows").glob("*.yml"))
+paths += list(Path(".github/workflows").glob("*.yaml"))
 paths += list(Path(".github/ISSUE_TEMPLATE").glob("*.yml"))
+paths += list(Path(".github/ISSUE_TEMPLATE").glob("*.yaml"))
 paths += list(Path("config/includes.chroot/usr/share/flexos/calamares/modules").glob("*.conf"))
 paths += [Path("config/includes.chroot/usr/share/flexos/calamares/branding/branding.desc")]
 for p in paths:
