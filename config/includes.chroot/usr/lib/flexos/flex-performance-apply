@@ -1,0 +1,51 @@
+#!/bin/sh
+set -u
+
+STATE_DIR=/run/flexos
+STATE="$STATE_DIR/performance-status"
+mkdir -p "$STATE_DIR"
+
+kernel="$(uname -r 2>/dev/null || echo unknown)"
+case "$kernel" in
+  *cachy*|*flexos-cachy*) cachy=yes ;;
+  *) cachy=no ;;
+esac
+
+sched_ext=no
+[ -d /sys/kernel/sched_ext ] && sched_ext=yes
+
+ntsync=no
+if command -v modprobe >/dev/null 2>&1; then
+  if modprobe ntsync >/dev/null 2>&1; then
+    ntsync=yes
+  fi
+fi
+
+bbr=no
+if command -v sysctl >/dev/null 2>&1; then
+  available="$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)"
+  case " $available " in
+    *" bbr "*)
+      if sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1; then
+        bbr=yes
+      fi
+      ;;
+  esac
+
+  # FQ pairs well with BBR. Unsupported kernels simply keep their existing qdisc.
+  sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+fi
+
+zram=no
+[ -e /sys/block/zram0 ] && zram=yes
+
+cat > "$STATE" <<EOF
+kernel=$kernel
+cachyos_kernel=$cachy
+sched_ext=$sched_ext
+ntsync=$ntsync
+bbr=$bbr
+zram=$zram
+EOF
+
+exit 0
