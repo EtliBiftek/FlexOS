@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+APPLY = "--apply-safe" in sys.argv
+
+
+def run(cmd: list[str]) -> str:
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30)
+        return p.stdout if p.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def pci_devices() -> list[tuple[str, str, str]]:
+    out = run(["lspci", "-Dn"])
+    devices = []
+    for line in out.splitlines():
+        m = re.match(r"^\S+\s+([0-9a-fA-F]{4}):\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4})", line)
+        if m:
+            devices.append(tuple(x.lower() for x in m.groups()))
+    return devices
+
+
+def cpu_vendor() -> str:
+    try:
+        text = Path("/proc/cpuinfo").read_text(errors="ignore")
+    except OSError:
+        return "unknown"
+    m = re.search(r"^vendor_id\s*:\s*(\S+)", text, re.M)
+    return m.group(1) if m else "unknown"
+
+
+def available(pkg: str) -> bool:
+    p = subprocess.run(["apt-cache", "show", pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return p.returncode == 0
+
+
+def installed(pkg: str) -> bool:
+    p = subprocess.run(["dpkg-query", "-W", "-f=${db:Status-Abbrev}", pkg], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    return p.returncode == 0 and p.stdout.startswith("ii")
+
+
+devs = pci_devices()
+gpus = [(c, v, d) for c, v, d in devs if c.startswith(("0300", "0302", "0380"))]
+net = [(c, v, d) for c, v, d in devs if c.startswith(("0200", "0280"))]
+
+safe: list[str] = []
+notes: list[str] = []
+
+vendor = cpu_vendor()
+if vendor == "AuthenticAMD":
+    safe.append("amd64-microcode")
+elif vendor == "GenuineIntel":
+    safe.append("intel-microcode")
+
+for _cls, ven, _dev in gpus:
+    if ven == "1002":
+        safe += ["firmware-amd-graphics", "mesa-vulkan-drivers"]
+        notes.append("AMD GPU: amdgpu + Mesa/Vulkan firmware profile")
+    elif ven == "8086":
+        safe += ["firmware-intel-graphics", "mesa-vulkan-drivers", "intel-media-va-driver"]
+        notes.append("Intel GPU: i915/xe + Mesa/Vulkan/media firmware profile")
+    elif ven == "10de":
+        notes.append("NVIDIA GPU: keep current driver; choose proprietary/open DKMS explicitly in Flex Driver Manager")
+
+for _cls, ven, _dev in net:
+    if ven == "8086":
+        safe.append("firmware-iwlwifi")
+    elif ven in {"10ec", "17aa"}:
+        safe.append("firmware-realtek")
+    elif ven in {"168c", "17cb"}:
+        safe.append("firmware-atheros")
+    elif ven == "14c3":
+        safe.append("firmware-mediatek")
+
+# Preserve order while removing duplicates and ignore names unavailable in the
+# configured Debian/FlexOS repositories.
+seen: set[str] = set()
+safe = [p for p in safe if not (p in seen or seen.add(p))]
+avail = [p for p in safe if available(p)]
+missing = [p for p in avail if not installed(p)]
+
+print(f"CPU vendor: {vendor}")
+print(f"GPU devices: {len(gpus)}")
+for note in notes:
+    print(f"  - {note}")
+print(f"Network devices: {len(net)}")
+print("Safe hardware packages:")
+for pkg in avail:
+    print(f"  {'installed' if installed(pkg) else 'missing':9} {pkg}")
+
+if not APPLY:
+    if missing:
+        print("\nRun 'sudo flex-hwd --apply-safe' to install only the safe firmware/Mesa/microcode set.")
+    raise SystemExit(0)
+
+if os.geteuid() != 0:
+    raise SystemExit("--apply-safe requires root")
+if not missing:
+    print("All safe hardware packages are already installed.")
+    raise SystemExit(0)
+
+print("Installing: " + " ".join(missing))
+subprocess.run(["apt-get", "update"], check=True)
+subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", *missing], check=True)
+if shutil.which("update-initramfs"):
+    subprocess.run(["update-initramfs", "-u", "-k", "all"], check=False)
+print("Hardware package profile applied. Reboot if firmware or microcode changed.")
