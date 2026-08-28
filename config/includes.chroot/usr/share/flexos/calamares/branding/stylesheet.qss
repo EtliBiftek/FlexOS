@@ -1,0 +1,234 @@
+/* FlexOS Calamares — monochrome dark installer theme.
+ * Layout follows the compact CachyOS Calamares presentation while keeping
+ * FlexOS branding and a black / grey palette.
+ */
+
+QWidget {
+    background-color: #1b1d20;
+    color: #e8e9ea;
+    font-size: 10pt;
+}
+
+QMainWindow,
+QDialog {
+    background-color: #1b1d20;
+}
+
+QLabel {
+    background-color: transparent;
+    color: #dedfe1;
+}
+
+QGroupBox {
+    background-color: #202225;
+    border: 1px solid #34373b;
+    border-radius: 7px;
+    margin-top: 10px;
+    padding: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    color: #cfd1d4;
+    background-color: #1b1d20;
+}
+
+QLineEdit,
+QComboBox,
+QSpinBox,
+QDoubleSpinBox,
+QDateEdit,
+QTimeEdit,
+QDateTimeEdit,
+QPlainTextEdit,
+QTextEdit,
+QListView,
+QTreeView,
+QTableView {
+    background-color: #232529;
+    color: #f1f2f3;
+    border: 1px solid #3b3e43;
+    border-radius: 5px;
+    padding: 5px 8px;
+    selection-background-color: #555a61;
+    selection-color: #ffffff;
+}
+
+QLineEdit:focus,
+QComboBox:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QDateEdit:focus,
+QTimeEdit:focus,
+QDateTimeEdit:focus,
+QPlainTextEdit:focus,
+QTextEdit:focus,
+QListView:focus,
+QTreeView:focus,
+QTableView:focus {
+    border: 1px solid #72777f;
+}
+
+QComboBox::drop-down {
+    border: 0;
+    width: 28px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #232529;
+    color: #eeeeef;
+    border: 1px solid #41444a;
+    selection-background-color: #4c5056;
+    selection-color: #ffffff;
+    outline: 0;
+}
+
+QPushButton {
+    min-height: 26px;
+    background-color: #26282c;
+    color: #e6e7e8;
+    border: 1px solid #42454b;
+    border-radius: 5px;
+    padding: 4px 13px;
+}
+
+QPushButton:hover {
+    background-color: #303338;
+    border-color: #555960;
+}
+
+QPushButton:pressed {
+    background-color: #383b40;
+}
+
+QPushButton:focus {
+    border-color: #737880;
+}
+
+QPushButton:default {
+    background-color: #d6d7d9;
+    color: #111214;
+    border-color: #e4e5e6;
+    font-weight: 600;
+}
+
+QPushButton:default:hover {
+    background-color: #eeeeef;
+}
+
+QPushButton:disabled {
+    background-color: #202225;
+    color: #666a70;
+    border-color: #303237;
+}
+
+QCheckBox,
+QRadioButton {
+    background-color: transparent;
+    spacing: 7px;
+    color: #dedfe1;
+}
+
+QHeaderView::section {
+    background-color: #24262a;
+    color: #cfd1d4;
+    border: 0;
+    border-right: 1px solid #34373b;
+    border-bottom: 1px solid #34373b;
+    padding: 6px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #34373b;
+    border-radius: 5px;
+    background-color: #1f2124;
+}
+
+QTabBar::tab {
+    background-color: #222428;
+    color: #aeb1b5;
+    border: 1px solid #34373b;
+    padding: 6px 12px;
+}
+
+QTabBar::tab:selected {
+    background-color: #d6d7d9;
+    color: #111214;
+}
+
+QProgressBar {
+    min-height: 12px;
+    background-color: #25272b;
+    border: 1px solid #373a3f;
+    border-radius: 6px;
+    color: #e6e7e8;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: #b7babf;
+    border-radius: 5px;
+}
+
+QScrollBar:vertical {
+    background-color: #1b1d20;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #484c52;
+    min-height: 28px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #62666d;
+}
+
+QScrollBar:horizontal {
+    background-color: #1b1d20;
+    height: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #484c52;
+    min-width: 28px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #62666d;
+}
+
+QScrollBar::add-line,
+QScrollBar::sub-line,
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: none;
+    border: none;
+}
+
+QToolTip {
+    background-color: #292c30;
+    color: #f0f1f2;
+    border: 1px solid #464a50;
+    padding: 4px;
+}
+
+/* Calamares' progress strip. The actual selected-step colors also come from
+ * branding.desc, so this remains readable on versions with different widget
+ * internals.
+ */
+#sidebarApp {
+    background-color: #17191c;
+    border-top: 1px solid #303338;
+}
+
+#navigationWidget {
+    background-color: #1b1d20;
+    border-top: 1px solid #2e3135;
+}
