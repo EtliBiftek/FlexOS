@@ -1,1 +1,2 @@
 DPkg::Pre-Invoke { "if [ -x /usr/lib/flexos/flex-snapshot-pre ]; then /usr/lib/flexos/flex-snapshot-pre || true; fi"; };
+DPkg::Post-Invoke { "if [ -x /usr/lib/flexos/flex-snapshot-post ]; then /usr/lib/flexos/flex-snapshot-post || true; fi"; };
