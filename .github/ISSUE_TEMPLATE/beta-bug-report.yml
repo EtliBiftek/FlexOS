@@ -1,0 +1,101 @@
+name: FlexOS Beta Bug Report
+description: Report a FlexOS 0.5 beta-development problem
+title: "[Beta Bug] "
+labels: ["beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing FlexOS. Do not include passwords, private keys or other secrets.
+        If possible, attach the ZIP produced by **Flex Center → Sistem Raporu**.
+
+  - type: input
+    id: version
+    attributes:
+      label: FlexOS version / build
+      description: Run `flex info` or copy the value from Flex Center.
+      placeholder: "0.5.0-beta.1-dev / build..."
+    validations:
+      required: true
+
+  - type: input
+    id: iso
+    attributes:
+      label: ISO SHA256
+      description: Required for installer / live-boot bugs.
+      placeholder: "sha256..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - VirtualBox
+        - QEMU/KVM
+        - VMware
+        - Real hardware
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware / VM configuration
+      placeholder: "CPU, GPU, RAM, storage, firmware mode"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: filesystem
+    attributes:
+      label: Root filesystem
+      options:
+        - ext4
+        - Btrfs
+        - Unknown / live session
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / system report
+      description: Attach FlexOS System Report, installer log, or paste the relevant short excerpt.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: I removed passwords, tokens, private keys and other secrets from attached logs.
+          required: true
