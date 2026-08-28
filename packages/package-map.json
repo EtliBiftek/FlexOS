@@ -64,6 +64,7 @@
       "usr/lib/flexos/flex-package-profile-install",
       "usr/lib/flexos/flex-profile-apply",
       "usr/lib/flexos/flex-snapshot-pre",
+      "usr/lib/flexos/flex-snapshot-post",
       "usr/lib/flexos/flex-recovery-console",
       "usr/lib/flexos/flex-postinstall",
       "usr/lib/systemd/system/flexos-profile.service",
