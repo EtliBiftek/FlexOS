@@ -36,6 +36,10 @@ required=(
   config/includes.chroot/usr/share/flexos/identity.json
   config/includes.chroot/usr/share/flexos/desktop-profiles.json
   config/includes.chroot/usr/share/flexos/package-profiles.json
+  config/includes.chroot/usr/share/flexos/calamares/branding/branding.desc
+  config/includes.chroot/usr/share/flexos/calamares/branding/stylesheet.qss
+  config/includes.chroot/usr/share/flexos/calamares/branding/welcome.svg
+  config/includes.chroot/usr/share/flexos/calamares/branding/show.qml
   config/includes.chroot/usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf
   config/includes.chroot/usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf
   config/hooks/live/010-flexos-branding.hook.chroot
@@ -170,6 +174,10 @@ for p in Path("config/includes.chroot/usr/share/applications").glob("*.desktop")
 # Branding / boot regressions seen during alpha.
 branding=Path("config/includes.chroot/usr/share/flexos/calamares/branding/branding.desc").read_text()
 assert 'slideshow:' in branding and 'slideshowAPI:' in branding
+assert 'sidebar: widget,bottom' in branding, "Calamares installer must keep the compact bottom progress strip"
+assert 'navigation: widget,bottom' in branding, "Calamares navigation must remain at the bottom"
+stylesheet=Path("config/includes.chroot/usr/share/flexos/calamares/branding/stylesheet.qss").read_text()
+assert '#sidebarApp' in stylesheet and 'QPushButton:default' in stylesheet, "FlexOS Calamares dark stylesheet is incomplete"
 grub=Path("config/includes.chroot/boot/grub/themes/flexos/theme.txt").read_text()
 assert "terminal-box:" not in grub, "invalid GRUB terminal-box regression"
 ply=Path("config/includes.chroot/usr/share/plymouth/themes/flexos/flexos.script").read_text()
@@ -178,6 +186,7 @@ assert 'Image.Text("Starting"' not in ply, "static Plymouth Starting regression"
 hook=Path("config/hooks/live/020-flexos-calamares.hook.chroot").read_text()
 assert "shellprocess@flexpostinstall" in hook
 assert "availableFileSystemTypes" in hook
+assert "stylesheet.qss" in hook, "Calamares live hook must install the FlexOS stylesheet"
 
 print("structured validation OK")
 PY
