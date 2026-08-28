@@ -7,6 +7,7 @@ systemctl enable bluetooth.service || true
 systemctl enable power-profiles-daemon.service || true
 systemctl enable flexos-profile.service || true
 systemctl enable flexos-identity.service || true
+systemctl enable flexos-performance.service || true
 systemctl enable flexos-ci-smoke.service || true
 systemctl enable ufw.service || true
 systemctl set-default graphical.target || true
@@ -19,6 +20,9 @@ ufw default deny incoming >/dev/null 2>&1 || true
 ufw default allow outgoing >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
 
+if command -v sysctl >/dev/null 2>&1; then
+  sysctl --system >/dev/null 2>&1 || true
+fi
 if command -v plymouth-set-default-theme >/dev/null 2>&1; then
   plymouth-set-default-theme flexos || true
 fi
