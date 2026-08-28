@@ -79,6 +79,21 @@
       "usr/share/flexos/desktop-profiles.json"
     ]
   },
+  "flexos-performance": {
+    "description": "FlexOS CachyOS-inspired kernel and desktop performance policy",
+    "depends": "flexos-base, systemd, procps, kmod, systemd-zram-generator, power-profiles-daemon",
+    "paths": [
+      "etc/systemd/zram-generator.conf",
+      "etc/sysctl.d/70-flexos-performance.conf",
+      "etc/systemd/system.conf.d/70-flexos-performance.conf",
+      "etc/systemd/user.conf.d/70-flexos-performance.conf",
+      "etc/systemd/journald.conf.d/70-flexos-performance.conf",
+      "usr/lib/flexos/flex-performance-apply",
+      "usr/lib/systemd/system/flexos-performance.service",
+      "usr/bin/flex-kernel-info",
+      "usr/bin/flex-game-performance"
+    ]
+  },
   "flexos-calamares": {
     "description": "FlexOS Calamares installer integration and branding",
     "depends": "flexos-base, flexos-tools, calamares, calamares-settings-debian, squashfs-tools, cracklib-runtime",
