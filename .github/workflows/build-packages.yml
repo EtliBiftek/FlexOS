@@ -1,0 +1,111 @@
+name: Build FlexOS Component Packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'config/includes.chroot/**'
+      - 'packages/**'
+      - 'scripts/build-flexos-packages.py'
+      - 'scripts/version-to-deb.py'
+      - 'scripts/build-apt-repo.sh'
+      - 'VERSION'
+      - '.github/workflows/build-packages.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flexos-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packages:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize executables
+        run: |
+          chmod +x scripts/*.sh scripts/*.py || true
+          find config/includes.chroot/usr/bin -maxdepth 1 -type f -name 'flex*' -exec chmod +x {} +
+          find config/includes.chroot/usr/lib/flexos -maxdepth 1 -type f -name 'flex*' -exec chmod +x {} +
+          chmod +x config/includes.chroot/etc/grub.d/41_flexos_recovery || true
+
+      - name: Install repository tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev apt-utils gnupg
+
+      - name: Build component packages
+        run: |
+          EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          PKGVER="$(python3 scripts/version-to-deb.py "$(cat VERSION)" --epoch "$EPOCH" --sha "$GITHUB_SHA")"
+          echo "Package version: $PKGVER"
+          python3 scripts/build-flexos-packages.py \
+            --output dist/packages \
+            --package-version "$PKGVER" \
+            --product-version "$(cat VERSION)" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/packages-latest"
+
+      - name: Build APT repository
+        env:
+          FLEXOS_APT_GPG_PRIVATE_KEY: ${{ secrets.FLEXOS_APT_GPG_PRIVATE_KEY }}
+          FLEXOS_APT_GPG_KEY_ID: ${{ secrets.FLEXOS_APT_GPG_KEY_ID }}
+          FLEXOS_APT_GPG_PASSPHRASE: ${{ secrets.FLEXOS_APT_GPG_PASSPHRASE }}
+        run: |
+          if [[ -n "${FLEXOS_APT_GPG_PRIVATE_KEY:-}" ]]; then
+            printf '%s' "$FLEXOS_APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          fi
+          ./scripts/build-apt-repo.sh dist/packages dist/aptrepo
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlexOS-component-packages-${{ github.sha }}
+          path: |
+            dist/packages
+            dist/aptrepo
+          retention-days: 30
+
+      - name: Publish rolling package release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view packages-latest >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              [[ -n "$asset" ]] && gh release delete-asset packages-latest "$asset" -y
+            done < <(gh release view packages-latest --json assets --jq '.assets[].name')
+            gh release edit packages-latest \
+              --title "FlexOS Component Updates" \
+              --prerelease \
+              --notes "Rolling packages for FlexOS beta-development systems. Files are SHA256-verified by flex-self-update."
+          else
+            gh release create packages-latest \
+              --title "FlexOS Component Updates" \
+              --prerelease \
+              --notes "Rolling packages for FlexOS beta-development systems. Files are SHA256-verified by flex-self-update."
+          fi
+          gh release upload packages-latest dist/packages/* --clobber
+
+      - name: Publish signed APT branch
+        if: ${{ vars.FLEXOS_PUBLISH_APT_REPO == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          test -f dist/aptrepo/dists/beta/InRelease || {
+            echo "Signed InRelease is missing. Configure FlexOS APT signing secrets before publishing." >&2
+            exit 1
+          }
+          tmp="$(mktemp -d)"
+          cp -a dist/aptrepo/. "$tmp/"
+          cd "$tmp"
+          git init
+          git checkout -b apt-repo
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .
+          git commit -m "Publish FlexOS beta APT repository"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin apt-repo
