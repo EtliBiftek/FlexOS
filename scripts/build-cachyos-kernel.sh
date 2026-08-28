@@ -7,6 +7,10 @@ WORK="${FLEXOS_KERNEL_WORKDIR:-$ROOT/.kernel-work}"
 JOBS="${FLEXOS_KERNEL_JOBS:-$(nproc)}"
 PKGBUILD_URL="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/PKGBUILD"
 CONFIG_URL="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
+CACHY_SIGNERS=(
+  E18447AC260021D31F3FF6C4C8A2A4774B8B63C4
+  E8B9AA39F054E30E8290D492C3C4820857F654FE
+)
 
 need(){ command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }; }
 for cmd in curl tar make dpkg-deb sha256sum sed grep awk nproc; do need "$cmd"; done
@@ -31,11 +35,35 @@ pkgrel="$(read_var pkgrel)"
 pkgver="${major}.${minor}"
 srcname="cachyos-${pkgver}-${tagrel}"
 tarball="$WORK/${srcname}.tar.gz"
+sigfile="$tarball.asc"
 source_url="https://github.com/CachyOS/linux/releases/download/${srcname}/${srcname}.tar.gz"
 
 printf 'CachyOS source: %s\n' "$srcname"
 printf 'Downloading: %s\n' "$source_url"
 curl -fL --retry 4 --retry-delay 3 "$source_url" -o "$tarball"
+
+signature_status=skipped
+if [[ "${FLEXOS_KERNEL_VERIFY_SIGNATURES:-1}" == "1" ]]; then
+  need gpg
+  curl -fL --retry 4 --retry-delay 3 "${source_url}.asc" -o "$sigfile"
+  export GNUPGHOME="$WORK/gnupg"
+  install -d -m 0700 "$GNUPGHOME"
+  for key in "${CACHY_SIGNERS[@]}"; do
+    gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$key"
+  done
+  verify_status="$(gpg --batch --status-fd=1 --verify "$sigfile" "$tarball" 2>&1)" || {
+    printf '%s\n' "$verify_status" >&2
+    echo 'ERROR: CachyOS kernel source signature verification failed.' >&2
+    exit 1
+  }
+  if ! printf '%s\n' "$verify_status" | grep -Eq "\[GNUPG:\] VALIDSIG (${CACHY_SIGNERS[0]}|${CACHY_SIGNERS[1]}) "; then
+    printf '%s\n' "$verify_status" >&2
+    echo 'ERROR: kernel archive was not signed by an approved CachyOS maintainer key.' >&2
+    exit 1
+  fi
+  signature_status=verified
+fi
+
 tar -xf "$tarball" -C "$WORK"
 
 SRC="$WORK/$srcname"
@@ -95,6 +123,7 @@ upstream=CachyOS/linux-cachyos
 upstream_source=${srcname}
 upstream_pkgver=${pkgver}
 upstream_pkgrel=${pkgrel}
+source_signature=${signature_status}
 flexos_localversion=-flexos-cachy
 architecture=amd64
 cpu_tuning=generic
