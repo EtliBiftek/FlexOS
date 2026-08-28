@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  issues: read
 
 concurrency:
   group: flexos-iso-${{ github.ref }}
@@ -21,12 +22,29 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
       - name: Normalize executable permissions
         run: |
-          chmod +x build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot
-          chmod +x config/includes.chroot/usr/bin/flexos-* config/includes.chroot/usr/lib/flexos/flexos-first-login
+          chmod +x build.sh clean.sh scripts/*.sh qa/*.py config/hooks/live/*.hook.chroot || true
+          find config/includes.chroot/usr/bin -maxdepth 1 -type f -name 'flex*' -exec chmod +x {} +
+          find config/includes.chroot/usr/lib/flexos -maxdepth 1 -type f -name 'flex*' -exec chmod +x {} +
+          chmod +x config/includes.chroot/etc/grub.d/41_flexos_recovery || true
+
       - name: Validate source tree
         run: ./scripts/validate.sh
+
+      - name: Validate FlexOS component packages
+        run: |
+          EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          PKGVER="$(python3 scripts/version-to-deb.py "$(cat VERSION)" --epoch "$EPOCH" --sha "$GITHUB_SHA")"
+          python3 scripts/build-flexos-packages.py \
+            --output dist/packages-validation \
+            --package-version "$PKGVER" \
+            --product-version "$(cat VERSION)" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/packages-latest"
+
+      - name: Development beta gate
+        run: python3 scripts/beta-gate.py --assume-automated-pass
 
   build:
     needs: validate
@@ -39,8 +57,10 @@ jobs:
 
       - name: Normalize executable permissions
         run: |
-          chmod +x build.sh clean.sh scripts/*.sh config/hooks/live/*.hook.chroot
-          chmod +x config/includes.chroot/usr/bin/flexos-* config/includes.chroot/usr/lib/flexos/flexos-first-login
+          chmod +x build.sh clean.sh scripts/*.sh qa/*.py config/hooks/live/*.hook.chroot || true
+          find config/includes.chroot/usr/bin -maxdepth 1 -type f -name 'flex*' -exec chmod +x {} +
+          find config/includes.chroot/usr/lib/flexos -maxdepth 1 -type f -name 'flex*' -exec chmod +x {} +
+          chmod +x config/includes.chroot/etc/grub.d/41_flexos_recovery || true
 
       - name: Reclaim runner disk space
         run: |
@@ -50,13 +70,17 @@ jobs:
       - name: Build inside Debian 13
         run: |
           docker run --rm --privileged \
+            -e GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" \
+            -e GITHUB_COMMIT_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
+            -e GITHUB_SHA="$GITHUB_SHA" \
+            -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
             -v "$PWD:/workspace" \
             -w /workspace \
             debian:13 \
             bash -lc '
               set -eux
               if [ -f /etc/apt/sources.list.d/debian.sources ]; then
-                sed -i "s/^Components:.*/Components: main contrib non-free-firmware/" /etc/apt/sources.list.d/debian.sources
+                sed -i "s/^Components:.*/Components: main contrib non-free non-free-firmware/" /etc/apt/sources.list.d/debian.sources
               fi
               apt-get update
               DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -70,21 +94,64 @@ jobs:
       - name: Smoke-test ISO structure
         run: |
           sudo apt-get update
-          sudo apt-get install -y xorriso
+          sudo apt-get install -y xorriso squashfs-tools
           ./scripts/smoke-test-iso.sh FlexOS-*.iso
+
+      - name: QEMU live-kernel boot smoke test
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 xorriso
+          ./scripts/qemu-boot-smoke.sh FlexOS-*.iso
+
+      - name: Build FlexOS component packages
+        run: |
+          EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          PKGVER="$(python3 scripts/version-to-deb.py "$(cat VERSION)" --epoch "$EPOCH" --sha "$GITHUB_SHA")"
+          python3 scripts/build-flexos-packages.py \
+            --output dist/packages \
+            --package-version "$PKGVER" \
+            --product-version "$(cat VERSION)" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/packages-latest"
+
+      - name: Verify tag matches product VERSION
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python3 scripts/check-tag-version.py
+
+      - name: Release gate for version tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python3 scripts/beta-gate.py --strict --assume-automated-pass
+
+      - name: Block tagged beta when critical issues are open
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count="$(gh issue list --state open --limit 500 --json number,title,labels --jq '
+            map(select(any(.labels[]?; ((.name | ascii_downcase) == "critical") or ((.name | ascii_downcase) == "severity: critical") or ((.name | ascii_downcase) == "priority: critical")))) | length
+          ')"
+          if [[ "$count" != "0" ]]; then
+            echo "Refusing beta release: $count open critical issue(s)." >&2
+            gh issue list --state open --limit 500 --json number,title,labels --jq '
+              .[] | select(any(.labels[]?; ((.name | ascii_downcase) == "critical") or ((.name | ascii_downcase) == "severity: critical") or ((.name | ascii_downcase) == "priority: critical"))) |
+              "#\(.number) \(.title)"
+            ' >&2
+            exit 1
+          fi
+          echo "No open critical-labelled issue blocks this beta tag."
 
       - name: Prepare GitHub Release assets
         run: |
           ISO="$(find . -maxdepth 1 -name 'FlexOS-*.iso' -print -quit)"
           ./scripts/package-release.sh "$ISO" release-assets
+          cp -a dist/packages/*.deb dist/packages/flexos-packages-manifest.json dist/packages/SHA256SUMS release-assets/
 
-      - name: Keep build log as a small CI artifact
+      - name: Keep build log as CI artifact
         uses: actions/upload-artifact@v4
         with:
           name: FlexOS-build-log-${{ github.sha }}
           path: build.log
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
       - name: Publish rolling development build
         if: github.ref == 'refs/heads/main'
@@ -103,16 +170,16 @@ jobs:
             gh release edit dev-latest \
               --title "FlexOS Development Build" \
               --prerelease \
-              --notes "Automated development build from main at commit $GITHUB_SHA. For testing only."
+              --notes "Automated FlexOS 0.5 beta-development build from main at $GITHUB_SHA. Manual beta QA is not implied."
           else
             gh release create dev-latest \
               --title "FlexOS Development Build" \
               --prerelease \
-              --notes "Automated development build from main at commit $GITHUB_SHA. For testing only."
+              --notes "Automated FlexOS 0.5 beta-development build from main at $GITHUB_SHA. Manual beta QA is not implied."
           fi
           gh release upload dev-latest release-assets/* --clobber
 
-      - name: Publish tagged release
+      - name: Publish tagged beta/release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,5 +187,22 @@ jobs:
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
             gh release create "${GITHUB_REF_NAME}" \
               --title "FlexOS ${GITHUB_REF_NAME#v}" \
+              --prerelease \
               --generate-notes
           gh release upload "${GITHUB_REF_NAME}" release-assets/* --clobber
+
+          if gh release view packages-latest >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              [[ -n "$asset" ]] && gh release delete-asset packages-latest "$asset" -y
+            done < <(gh release view packages-latest --json assets --jq '.assets[].name')
+            gh release edit packages-latest \
+              --title "FlexOS Component Updates" \
+              --prerelease \
+              --notes "Current FlexOS beta component set from ${GITHUB_REF_NAME}."
+          else
+            gh release create packages-latest \
+              --title "FlexOS Component Updates" \
+              --prerelease \
+              --notes "Current FlexOS beta component set from ${GITHUB_REF_NAME}."
+          fi
+          gh release upload packages-latest dist/packages/* --clobber
