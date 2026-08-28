@@ -3,6 +3,7 @@ set -eu
 
 if [ -d /etc/calamares/branding/debian ]; then
   cp -f /usr/share/flexos/calamares/branding/branding.desc /etc/calamares/branding/debian/branding.desc
+  cp -f /usr/share/flexos/calamares/branding/stylesheet.qss /etc/calamares/branding/debian/stylesheet.qss
   cp -f /usr/share/flexos/calamares/branding/flexos-logo.svg /etc/calamares/branding/debian/flexos-logo.svg
   cp -f /usr/share/flexos/calamares/branding/welcome.svg /etc/calamares/branding/debian/welcome.svg
   cp -f /usr/share/flexos/calamares/branding/show.qml /etc/calamares/branding/debian/show.qml
