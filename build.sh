@@ -20,6 +20,7 @@ for cmd in lb sha256sum find cp python3 dpkg-deb; do
 done
 
 ./scripts/validate.sh
+./scripts/validate-cachyos-stack.sh
 
 # Build FlexOS-authored .deb packages before live-build. Debian Live officially
 # installs custom .deb files from config/packages.chroot/, so the first boot is
