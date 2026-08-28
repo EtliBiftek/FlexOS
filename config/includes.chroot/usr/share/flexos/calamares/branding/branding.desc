@@ -1,7 +1,7 @@
 ---
 componentName: debian
-welcomeStyleCalamares: true
-welcomeExpandingLogo: true
+welcomeStyleCalamares: false
+welcomeExpandingLogo: false
 windowExpanding: normal
 windowSize: 1080px,700px
 windowPlacement: center
@@ -20,8 +20,10 @@ strings:
     releaseNotesUrl:     https://github.com/EtliBiftek/FlexOS/releases
     donateUrl:           ""
 
-sidebar: widget
-navigation: widget
+# CachyOS-style Calamares layout: the installation steps stay in a compact
+# horizontal strip at the bottom, with the normal Back / Next / Cancel row.
+sidebar: widget,bottom
+navigation: widget,bottom
 
 images:
     productLogo:    "flexos-logo.svg"
@@ -29,11 +31,12 @@ images:
     productWelcome: "welcome.svg"
 
 slideshow: "show.qml"
-
-style:
-    SidebarBackground:        "#101215"
-    SidebarText:              "#8f949b"
-    SidebarTextCurrent:       "#ffffff"
-    SidebarBackgroundCurrent: "#292d33"
-
 slideshowAPI: 2
+
+# Monochrome FlexOS palette. The full QWidget treatment lives in
+# stylesheet.qss; these values are also consumed directly by the sidebar.
+style:
+    SidebarBackground:        "#17191c"
+    SidebarText:              "#9a9da3"
+    SidebarTextCurrent:       "#111214"
+    SidebarBackgroundCurrent: "#d6d7d9"
