@@ -47,15 +47,44 @@ python3 scripts/build-flexos-packages.py \
 
 echo "FlexOS component package version embedded in ISO: $PACKAGE_VERSION"
 
+# A rolling CachyOS-derived kernel is built by build-cachyos-kernel.yml and
+# downloaded by the ISO workflow. Keep linux-image-amd64 in the package list as
+# a fully installed fallback kernel. Local/offline builds remain possible when
+# no custom kernel artifact is available.
+CACHY_KERNEL=0
+if [[ -d dist/kernel ]] && compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null; then
+  cp -f dist/kernel/linux-image-*.deb config/packages.chroot/
+  if compgen -G 'dist/kernel/linux-headers-*.deb' >/dev/null; then
+    cp -f dist/kernel/linux-headers-*.deb config/packages.chroot/
+  fi
+  CACHY_KERNEL=1
+  echo "CachyOS-derived FlexOS kernel packages embedded in ISO."
+elif [[ "${FLEXOS_REQUIRE_CACHY_KERNEL:-0}" == "1" ]]; then
+  echo "ERROR: FLEXOS_REQUIRE_CACHY_KERNEL=1 but dist/kernel has no kernel package." >&2
+  exit 1
+else
+  echo "WARNING: no CachyOS-derived kernel artifact found; using Debian kernel only." >&2
+fi
+
 lb clean --purge || true
 rm -rf config/binary config/bootstrap config/bootloaders config/chroot config/common config/source
 rm -f FlexOS-*.iso FlexOS-*.iso.sha256 build.log
+
+linux_args=(--linux-flavours amd64)
+if [[ "$CACHY_KERNEL" == "1" ]]; then
+  # Custom kernels from packages.chroot are already package-managed. Disable
+  # live-build's automatic linux-image-$flavour installation and point its boot
+  # menu generator at our unique kernel suffix. The Debian amd64 kernel remains
+  # in the installed root filesystem as a fallback and appears as an additional
+  # live boot entry.
+  linux_args=(--linux-flavours flexos-cachy --linux-packages none)
+fi
 
 lb config noauto \
   --mode debian \
   --distribution trixie \
   --architectures amd64 \
-  --linux-flavours amd64 \
+  "${linux_args[@]}" \
   --binary-images iso-hybrid \
   --bootloaders "syslinux grub-efi" \
   --archive-areas "main contrib non-free non-free-firmware" \
@@ -108,5 +137,5 @@ fi
 mv "$iso" "$OUTPUT"
 sha256sum "$OUTPUT" > "$OUTPUT.sha256"
 
-printf '\nBuilt: %s\nChecksum: %s.sha256\nEmbedded FlexOS components: %s\n' \
-  "$OUTPUT" "$OUTPUT" "$PACKAGE_VERSION"
+printf '\nBuilt: %s\nChecksum: %s.sha256\nEmbedded FlexOS components: %s\nCachyOS-derived kernel: %s\n' \
+  "$OUTPUT" "$OUTPUT" "$PACKAGE_VERSION" "$CACHY_KERNEL"
