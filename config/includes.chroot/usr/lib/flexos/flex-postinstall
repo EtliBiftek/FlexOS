@@ -77,10 +77,11 @@ Path("/etc/flexos/install-info").write_text(
     encoding="utf-8"
 )
 
-for unit in ("NetworkManager.service","sddm.service","flexos-profile.service","flexos-identity.service","ufw.service"):
+for unit in ("NetworkManager.service","sddm.service","flexos-profile.service","flexos-identity.service","flexos-performance.service","ufw.service"):
     run(["systemctl","enable",unit],30)
 
 run(["systemctl","set-default","graphical.target"],30)
+run(["sysctl","--system"],60)
 run(["update-initramfs","-u","-k","all"],600)
 run(["update-grub"],180)
 print(f"FlexOS post-install complete: filesystem={fstype}, snapper={snap}, boot={boot}")
