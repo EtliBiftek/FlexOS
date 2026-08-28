@@ -3,79 +3,105 @@ import calamares.slideshow 1.0
 
 Presentation {
     Slide {
-        Rectangle { anchors.fill: parent; color: "#101215" }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -48
-            text: "FlexOS 0.5"
-            color: "#f2f3f4"
-            font.pixelSize: 42
-            font.bold: true
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 10
-            text: qsTr("KDE Plasma Edition is being installed")
-            color: "#a4a9b0"
-            font.pixelSize: 18
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 48
-            text: qsTr("Clean. Flexible. Yours.")
-            color: "#747980"
-            font.pixelSize: 14
+        Rectangle {
+            anchors.fill: parent
+            color: "#1b1d20"
+
+            Rectangle {
+                width: 112
+                height: 112
+                radius: 24
+                color: "#24272b"
+                border.color: "#3c4046"
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -86
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "F"
+                    color: "#e4e5e7"
+                    font.pixelSize: 58
+                    font.bold: true
+                }
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: 18
+                text: qsTr("Installing FlexOS")
+                color: "#f0f1f2"
+                font.pixelSize: 30
+                font.bold: true
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: 60
+                text: qsTr("Your system is being prepared. You can keep this window open.")
+                color: "#999da3"
+                font.pixelSize: 15
+            }
         }
     }
 
     Slide {
-        Rectangle { anchors.fill: parent; color: "#101215" }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -50
-            text: qsTr("Flex Recovery")
-            color: "#f2f3f4"
-            font.pixelSize: 34
-            font.bold: true
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 20
-            width: parent.width * 0.76
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            text: qsTr("GRUB recovery entries, package repair and safe-graphics recovery are included for beta testing.")
-            color: "#a4a9b0"
-            font.pixelSize: 17
+        Rectangle {
+            anchors.fill: parent
+            color: "#1b1d20"
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -35
+                text: qsTr("Built for a clean desktop")
+                color: "#f0f1f2"
+                font.pixelSize: 28
+                font.bold: true
+            }
+
+            Text {
+                width: parent.width * 0.72
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: 20
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: qsTr("KDE Plasma, Flex Center, recovery tools and FlexOS component updates are configured as part of the installation.")
+                color: "#9da1a7"
+                font.pixelSize: 16
+            }
         }
     }
 
     Slide {
-        Rectangle { anchors.fill: parent; color: "#101215" }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -50
-            text: qsTr("Flex Center")
-            color: "#f2f3f4"
-            font.pixelSize: 34
-            font.bold: true
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 20
-            width: parent.width * 0.78
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            text: qsTr("Updates, FlexOS component packages, drivers, snapshots, performance, privacy and diagnostics in one place.")
-            color: "#a4a9b0"
-            font.pixelSize: 17
+        Rectangle {
+            anchors.fill: parent
+            color: "#1b1d20"
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -35
+                text: qsTr("Almost ready")
+                color: "#f0f1f2"
+                font.pixelSize: 28
+                font.bold: true
+            }
+
+            Text {
+                width: parent.width * 0.72
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: 20
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: qsTr("When installation finishes, restart the computer and remove the live USB to enter your installed FlexOS system.")
+                color: "#9da1a7"
+                font.pixelSize: 16
+            }
         }
     }
 }
