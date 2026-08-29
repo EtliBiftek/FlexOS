@@ -12,6 +12,11 @@ CACHY_SIGNERS=(
   E8B9AA39F054E30E8290D492C3C4820857F654FE
 )
 
+# The build changes into the extracted kernel source directory before copying
+# packages. Resolve repo-relative paths now so they remain valid after cd.
+[[ "$OUT" = /* ]] || OUT="$ROOT/$OUT"
+[[ "$WORK" = /* ]] || WORK="$ROOT/$WORK"
+
 need(){ command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }; }
 for cmd in curl tar make dpkg-deb sha256sum sed grep awk nproc; do need "$cmd"; done
 
