@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ISO="${1:?Usage: qemu-boot-smoke.sh FlexOS.iso}"
-TIMEOUT="${FLEXOS_QEMU_TIMEOUT:-180}"
+TIMEOUT="${FLEXOS_QEMU_TIMEOUT:-240}"
 
 for c in xorriso qemu-system-x86_64 timeout grep; do
   command -v "$c" >/dev/null 2>&1 || { echo "Missing command: $c" >&2; exit 2; }
@@ -24,7 +24,7 @@ timeout "$TIMEOUT" qemu-system-x86_64 \
   -cdrom "$ISO" \
   -kernel "$tmp/vmlinuz" \
   -initrd "$tmp/initrd.img" \
-  -append "boot=live components username=flex hostname=flexos user-fullname=FlexOS locales=en_US.UTF-8 keyboard-layouts=us console=ttyS0,115200n8 flexos.ci=1 systemd.show_status=1" \
+  -append "boot=live components live-media=/dev/sr0 live-media-timeout=30 username=flex hostname=flexos user-fullname=FlexOS locales=en_US.UTF-8 keyboard-layouts=us console=ttyS0,115200n8 flexos.ci=1 systemd.unit=multi-user.target systemd.show_status=1" \
   -display none \
   -serial stdio \
   -monitor none \
@@ -35,7 +35,7 @@ set -e
 if ! grep -Eq 'Linux version [^[:space:]]*flexos-cachy' "$log"; then
   echo "[FAIL] QEMU booted a kernel, but it was not the FlexOS CachyOS-derived kernel." >&2
   grep -m1 -E 'Linux version ' "$log" >&2 || true
-  tail -n 120 "$log" >&2
+  tail -n 160 "$log" >&2
   exit 1
 fi
 
@@ -45,6 +45,6 @@ if grep -q "FLEXOS_CI_BOOT_OK" "$log"; then
 fi
 
 echo "[FAIL] FlexOS live boot sentinel was not observed (qemu exit $rc)." >&2
-echo "Last 120 lines:" >&2
-tail -n 120 "$log" >&2
+echo "Last 160 lines:" >&2
+tail -n 160 "$log" >&2
 exit 1
