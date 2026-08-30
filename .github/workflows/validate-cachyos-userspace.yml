@@ -4,12 +4,15 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - 'build.sh'
       - 'config/includes.chroot/**'
       - 'config/hooks/live/**'
       - 'packages/**'
+      - 'scripts/fetch-cachyos-kernel.py'
       - 'scripts/validate-cachyos-stack.sh'
       - 'scripts/smoke-test-iso.sh'
       - 'scripts/qemu-boot-smoke.sh'
+      - '.github/workflows/build-iso.yml'
       - '.github/workflows/validate-cachyos-userspace.yml'
 
 permissions:
@@ -22,11 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Normalize executable permissions
-        run: chmod +x scripts/*.sh scripts/*.py config/hooks/live/*.hook.chroot || true
+        run: chmod +x build.sh scripts/*.sh scripts/*.py config/hooks/live/*.hook.chroot || true
       - name: Validate source
         run: |
           ./scripts/validate.sh
           ./scripts/validate-cachyos-stack.sh
+          bash -n build.sh
           bash -n scripts/smoke-test-iso.sh
           bash -n scripts/qemu-boot-smoke.sh
           grep -q 'flexos-cachy' scripts/qemu-boot-smoke.sh
