@@ -63,6 +63,9 @@ jobs:
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential bc bison flex libssl-dev libelf-dev libdw-dev dwarves libncurses-dev rsync cpio kmod fakeroot dpkg-dev debhelper pkg-config clang llvm lld rustc bindgen libclang-dev zstd xz-utils ca-certificates curl git python3 gnupg dirmngr
             ./scripts/build-cachyos-kernel.sh dist/kernel
           '
+          # The bind-mounted build output is created by root inside Docker.
+          # Return ownership to the Actions runner before host-side cleanup/checks.
+          sudo chown -R "$(id -u):$(id -g)" dist/kernel
       - name: Remove non-runtime debug package from distributable set
         if: steps.gate.outputs.build == 'true'
         run: |
