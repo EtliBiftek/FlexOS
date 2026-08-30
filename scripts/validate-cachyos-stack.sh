@@ -36,7 +36,10 @@ assert 'usr/bin/flex-gaming' in gaming
 assert 'flexos-performance' in m['flexos-center']['depends'] and 'flexos-gaming' in m['flexos-center']['depends']
 PY
 grep -qx 'linux-image-amd64' config/package-lists/flexos.list.chroot || { echo '[FAIL] Debian fallback kernel must remain installed.' >&2;exit 1; }
-grep -q -- '--linux-flavours flexos-cachy --linux-packages none' build.sh || { echo '[FAIL] custom live kernel selection missing.' >&2;exit 1; }
+grep -q 'CACHY_IMAGE_PACKAGE=.*dpkg-deb' build.sh || { echo '[FAIL] custom kernel package name is not derived from the embedded .deb.' >&2;exit 1; }
+grep -q 'CACHY_FLAVOUR=' build.sh || { echo '[FAIL] custom live kernel flavour derivation missing.' >&2;exit 1; }
+grep -Fq 'linux_args=(--linux-flavours "$CACHY_FLAVOUR amd64" --linux-packages linux-image)' build.sh || { echo '[FAIL] custom live kernel must be first, with Debian amd64 fallback second.' >&2;exit 1; }
+if grep -q -- '--linux-packages none' build.sh; then echo '[FAIL] live-build kernel installation must not be disabled.' >&2;exit 1;fi
 grep -q '^compression-algorithm = zstd$' config/includes.chroot/etc/systemd/zram-generator.conf
 grep -q '^zram-size = ram$' config/includes.chroot/etc/systemd/zram-generator.conf
 grep -q '^swap-priority = 100$' config/includes.chroot/etc/systemd/zram-generator.conf
