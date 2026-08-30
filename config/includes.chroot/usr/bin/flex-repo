@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, os, platform, re, subprocess, sys, urllib.request
+import json, os, subprocess, sys, urllib.request
 from pathlib import Path
 
-MAN=Path('/usr/share/flexos/optimized-repos.json');STATE=Path('/etc/flexos/optimized-repo');SRC=Path('/etc/apt/sources.list.d/flexos-optimized.sources')
+MAN=Path('/usr/share/flexos/optimized-repos.json')
+STATE=Path('/etc/flexos/optimized-repo')
+SRC=Path('/etc/apt/sources.list.d/flexos-optimized.sources')
+KEY=Path('/etc/apt/keyrings/flexos-archive-keyring.asc')
+KEY_URL='https://etlibiftek.github.io/FlexOS/flexos-archive-keyring.asc'
+UA={'User-Agent':'FlexOS-repo/1'}
 
 def root():
     if os.geteuid()!=0:raise SystemExit('This action requires root.')
@@ -16,7 +21,7 @@ def level():
     if v3<=f:return 'x86-64-v3'
     return 'baseline'
 def zen4():
-    try:t=Path('/proc/cpuinfo').read_text(errors='ignore').lower();return 'authenticamd' in t and level() in ('x86-64-v3','x86-64-v4') and 'avx512' in t
+    try:t=Path('/proc/cpuinfo').read_text(errors='ignore').lower();return 'authenticamd' in t and level() in ('x86-64-v3','x86-64-v4') and 'avx512f' in flags()
     except Exception:return False
 def compatible(p):
     l=level()
@@ -28,16 +33,23 @@ def compatible(p):
 def url_for(p):
     d=json.loads(MAN.read_text());spec=d['profiles'][p];return d['base'].format(branch=spec['branch']).rstrip('/')
 def healthy(p):
-    url=url_for(p)+'/dists/beta/InRelease'
+    if p=='baseline':return True
     try:
-        req=urllib.request.Request(url,headers={'User-Agent':'FlexOS-repo/1'});r=urllib.request.urlopen(req,timeout=8);return r.status==200 and len(r.read(256))>0
+        req=urllib.request.Request(url_for(p)+'/dists/beta/InRelease',headers=UA)
+        with urllib.request.urlopen(req,timeout=8) as r:return r.status==200 and len(r.read(256))>0
     except Exception:return False
+def install_key():
+    KEY.parent.mkdir(parents=True,exist_ok=True)
+    req=urllib.request.Request(KEY_URL,headers=UA)
+    with urllib.request.urlopen(req,timeout=15) as r:data=r.read(1024*1024)
+    if b'BEGIN PGP PUBLIC KEY BLOCK' not in data:raise SystemExit('FlexOS repository signing key download is invalid.')
+    tmp=KEY.with_suffix('.tmp');tmp.write_bytes(data);os.chmod(tmp,0o644);os.replace(tmp,KEY)
 def auto_profile():
-    for p in ('zen4','x86-64-v4','x86-64-v3','baseline'):
+    for p in ('zen4','x86-64-v4','x86-64-v3'):
         if compatible(p) and healthy(p):return p
     return 'baseline'
 def select(p):
-    root();d=json.loads(MAN.read_text());
+    root();d=json.loads(MAN.read_text())
     if p=='auto':p=auto_profile()
     if p not in d['profiles']:raise SystemExit('Unknown profile.')
     if not compatible(p):raise SystemExit(f'CPU is not compatible with {p}.')
@@ -47,16 +59,15 @@ def select(p):
     if not healthy(p):
         print(f'{p} repository is not published/healthy; falling back to baseline without changing APT.')
         SRC.unlink(missing_ok=True);STATE.write_text('baseline\n');return
-    base=url_for(p)
-    SRC.write_text(f'Types: deb\nURIs: {base}\nSuites: beta\nComponents: main\nSigned-By: /usr/share/keyrings/flexos-archive-keyring.gpg\n')
+    install_key();base=url_for(p)
+    SRC.write_text(f'Types: deb\nURIs: {base}\nSuites: beta\nComponents: main\nSigned-By: {KEY}\n')
     STATE.write_text(p+'\n');r=subprocess.run(['apt-get','update'])
     if r.returncode:
-        SRC.unlink(missing_ok=True);STATE.write_text('baseline\n');subprocess.run(['apt-get','update']);raise SystemExit('Optimized repository failed APT validation; reverted to baseline.')
+        SRC.unlink(missing_ok=True);STATE.write_text('baseline\n');subprocess.run(['apt-get','update']);raise SystemExit('Optimized repository failed APT signature/index validation; reverted to baseline.')
     print('Selected:',p)
 def status():
-    selected=STATE.read_text().strip() if STATE.exists() else 'baseline';print('cpu:',level());print('selected:',selected)
-    for p in json.loads(MAN.read_text())['profiles']:
-        print(f'{p}: compatible={compatible(p)} published={healthy(p)}')
+    selected=STATE.read_text().strip() if STATE.exists() else 'baseline';print('cpu:',level());print('zen4-target-compatible:',zen4());print('selected:',selected)
+    for p in json.loads(MAN.read_text())['profiles']:print(f'{p}: compatible={compatible(p)} published={healthy(p)}')
 def main():
     a=sys.argv[1:] or ['status']
     if a[0]=='status':status()

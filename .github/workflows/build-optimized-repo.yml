@@ -36,25 +36,32 @@ jobs:
         run: |
           set -eux
           case "$PROFILE" in
-            x86-64-v3) CFLAGS='-O2 -pipe -march=x86-64-v3 -mtune=generic' ;;
-            x86-64-v4) CFLAGS='-O2 -pipe -march=x86-64-v4 -mtune=generic' ;;
-            zen4) CFLAGS='-O2 -pipe -march=znver4 -mtune=znver4' ;;
+            x86-64-v3) CFLAGS='-O2 -pipe -march=x86-64-v3 -mtune=generic'; SUFFIX=v3 ;;
+            x86-64-v4) CFLAGS='-O2 -pipe -march=x86-64-v4 -mtune=generic'; SUFFIX=v4 ;;
+            zen4) CFLAGS='-O2 -pipe -march=znver4 -mtune=znver4'; SUFFIX=zen4 ;;
             *) exit 2 ;;
           esac
-          mkdir -p /workspace/out /workspace/src
-          cd /workspace/src
+          OUT="$GITHUB_WORKSPACE/dist/optimized"
+          SRCROOT="$GITHUB_WORKSPACE/.opt-src"
+          rm -rf "$OUT" "$SRCROOT"
+          mkdir -p "$OUT" "$SRCROOT"
+          cd "$SRCROOT"
+          export DEBFULLNAME='FlexOS Build Service' DEBEMAIL='noreply@flexos.local'
           for pkg in $PACKAGES; do
             apt-get build-dep -y "$pkg"
+            before="$(find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)"
             apt-get source "$pkg"
-            dir="$(find . -mindepth 1 -maxdepth 1 -type d -name "${pkg}*" | sort | tail -n1)"
+            dir="$(comm -13 <(printf '%s\n' "$before") <(find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort) | tail -n1)"
             test -n "$dir"
             cd "$dir"
-            DEB_BUILD_OPTIONS='nocheck parallel='"$(nproc)" \
+            dch --local "+flexos${SUFFIX}" --distribution beta --force-distribution "FlexOS ${PROFILE} optimized rebuild"
+            DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" \
             DEB_CFLAGS_MAINT_APPEND="$CFLAGS" DEB_CXXFLAGS_MAINT_APPEND="$CFLAGS" \
               dpkg-buildpackage -b -uc -us
             cd ..
-            find . -maxdepth 1 -type f -name '*.deb' -exec mv -t /workspace/out {} +
+            find . -maxdepth 1 -type f -name '*.deb' -exec mv -t "$OUT" {} +
           done
+          test -n "$(find "$OUT" -maxdepth 1 -name '*.deb' -print -quit)"
       - name: Build signed APT repository
         env:
           FLEXOS_APT_GPG_PRIVATE_KEY: ${{ secrets.FLEXOS_APT_GPG_PRIVATE_KEY }}
@@ -63,35 +70,48 @@ jobs:
         run: |
           set -eux
           test -n "${FLEXOS_APT_GPG_PRIVATE_KEY:-}" || { echo 'APT signing key is required for publication.' >&2; exit 1; }
+          test -n "${FLEXOS_APT_GPG_KEY_ID:-}" || { echo 'APT signing key ID is required for publication.' >&2; exit 1; }
           printf '%s' "$FLEXOS_APT_GPG_PRIVATE_KEY" | gpg --batch --import
-          root=/workspace/repo
+          root="$GITHUB_WORKSPACE/dist/optimized-repo"
+          rm -rf "$root"
           mkdir -p "$root/pool/main" "$root/dists/beta/main/binary-amd64"
-          cp /workspace/out/*.deb "$root/pool/main/"
+          cp "$GITHUB_WORKSPACE"/dist/optimized/*.deb "$root/pool/main/"
           cd "$root"
           dpkg-scanpackages --multiversion pool/main /dev/null > dists/beta/main/binary-amd64/Packages
           gzip -9kc dists/beta/main/binary-amd64/Packages > dists/beta/main/binary-amd64/Packages.gz
-          apt-ftparchive release dists/beta > dists/beta/Release
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=FlexOS \
+            -o APT::FTPArchive::Release::Label=FlexOS-Optimized \
+            -o APT::FTPArchive::Release::Suite=beta \
+            -o APT::FTPArchive::Release::Codename=beta \
+            -o APT::FTPArchive::Release::Architectures=amd64 \
+            -o APT::FTPArchive::Release::Components=main \
+            release dists/beta > dists/beta/Release
           gpg --batch --yes --pinentry-mode loopback --passphrase "${FLEXOS_APT_GPG_PASSPHRASE:-}" \
             --local-user "$FLEXOS_APT_GPG_KEY_ID" --clearsign -o dists/beta/InRelease dists/beta/Release
           gpg --batch --yes --pinentry-mode loopback --passphrase "${FLEXOS_APT_GPG_PASSPHRASE:-}" \
             --local-user "$FLEXOS_APT_GPG_KEY_ID" -abs -o dists/beta/Release.gpg dists/beta/Release
+          gpg --batch --yes --armor --export "$FLEXOS_APT_GPG_KEY_ID" > flexos-archive-keyring.asc
       - name: Publish optimized APT branch
         env:
           PROFILE: ${{ inputs.profile }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          case "$PROFILE" in x86-64-v3) branch=apt-v3;; x86-64-v4) branch=apt-v4;; zen4) branch=apt-zen4;; esac
-          cd /workspace/repo
+          set -eux
+          case "$PROFILE" in x86-64-v3) branch=apt-v3;; x86-64-v4) branch=apt-v4;; zen4) branch=apt-zen4;; *) exit 2;; esac
+          cd "$GITHUB_WORKSPACE/dist/optimized-repo"
           git init
           git checkout -b "$branch"
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add . && git commit -m "Publish FlexOS $PROFILE optimized repository"
+          git add .
+          git commit -m "Publish FlexOS $PROFILE optimized repository"
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin "$branch"
       - name: Upload optimized packages
         uses: actions/upload-artifact@v4
         with:
           name: FlexOS-${{ inputs.profile }}-packages-${{ github.sha }}
-          path: /workspace/out/*.deb
+          path: dist/optimized/*.deb
+          if-no-files-found: error
           retention-days: 30
