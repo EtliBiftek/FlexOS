@@ -38,12 +38,15 @@ assert {'usr/bin/flex-hwd','usr/bin/flex-mirror','usr/bin/flex-repo','usr/bin/fl
 assert 'usr/bin/flex-gaming' in gaming
 assert 'flexos-performance' in m['flexos-center']['depends'] and 'flexos-gaming' in m['flexos-center']['depends']
 PY
-grep -qx 'linux-image-amd64' config/package-lists/flexos.list.chroot || { echo '[FAIL] Debian fallback kernel must remain installed.' >&2;exit 1; }
+grep -qx 'linux-image-amd64' config/package-lists/flexos.list.chroot || { echo '[FAIL] Debian fallback kernel must remain installed in the live system.' >&2;exit 1; }
 grep -Fq 'REQUIRE_CACHY_KERNEL="${FLEXOS_REQUIRE_CACHY_KERNEL:-1}"' build.sh || { echo '[FAIL] CachyOS-derived kernel must be required by default.' >&2;exit 1; }
 grep -q 'CACHY_IMAGE_PACKAGE=.*dpkg-deb' build.sh || { echo '[FAIL] custom kernel package name is not derived from the embedded .deb.' >&2;exit 1; }
-grep -q 'CACHY_FLAVOUR=' build.sh || { echo '[FAIL] custom live kernel flavour derivation missing.' >&2;exit 1; }
-grep -Fq 'EXPECTED_HEADER_PACKAGE="linux-headers-${CACHY_FLAVOUR}"' build.sh || { echo '[FAIL] matching CachyOS kernel headers are not enforced.' >&2;exit 1; }
-grep -Fq 'linux_args=(--linux-flavours "$CACHY_FLAVOUR amd64" --linux-packages linux-image)' build.sh || { echo '[FAIL] custom live kernel must be first, with Debian amd64 fallback second.' >&2;exit 1; }
+grep -Fq 'CACHY_UNAME_FLAVOUR="${CACHY_IMAGE_PACKAGE#linux-image-}"' build.sh || { echo '[FAIL] custom kernel uname flavour derivation missing.' >&2;exit 1; }
+grep -Fq 'CACHY_LIVE_FLAVOUR="flexos-cachy"' build.sh || { echo '[FAIL] ABI-independent live-build kernel flavour missing.' >&2;exit 1; }
+grep -Fq 'EXPECTED_HEADER_PACKAGE="linux-headers-${CACHY_UNAME_FLAVOUR}"' build.sh || { echo '[FAIL] matching CachyOS kernel headers are not enforced.' >&2;exit 1; }
+grep -Fq 'Package: linux-image-${CACHY_LIVE_FLAVOUR}' build.sh || { echo '[FAIL] ABI-independent CachyOS kernel metapackage is not generated.' >&2;exit 1; }
+grep -Fq 'Depends: ${CACHY_IMAGE_PACKAGE} (= ${CACHY_IMAGE_VERSION})' build.sh || { echo '[FAIL] CachyOS kernel metapackage does not pin the versioned runtime kernel.' >&2;exit 1; }
+grep -Fq 'linux_args=(--linux-flavours "$CACHY_LIVE_FLAVOUR" --linux-packages linux-image)' build.sh || { echo '[FAIL] live-build must use the ABI-independent CachyOS flavour.' >&2;exit 1; }
 if grep -Eq '^[[:space:]]*linux_args=.*--linux-packages[[:space:]]+none([[:space:])]|$)' build.sh; then echo '[FAIL] live-build kernel installation must not be disabled.' >&2;exit 1;fi
 grep -q '^compression-algorithm = zstd$' config/includes.chroot/etc/systemd/zram-generator.conf
 grep -q '^zram-size = ram$' config/includes.chroot/etc/systemd/zram-generator.conf
