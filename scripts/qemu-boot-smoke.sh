@@ -32,8 +32,15 @@ timeout "$TIMEOUT" qemu-system-x86_64 \
 rc=${PIPESTATUS[0]}
 set -e
 
+if ! grep -Eq 'Linux version [^[:space:]]*flexos-cachy' "$log"; then
+  echo "[FAIL] QEMU booted a kernel, but it was not the FlexOS CachyOS-derived kernel." >&2
+  grep -m1 -E 'Linux version ' "$log" >&2 || true
+  tail -n 120 "$log" >&2
+  exit 1
+fi
+
 if grep -q "FLEXOS_CI_BOOT_OK" "$log"; then
-  echo "[PASS] FlexOS live system reached multi-user.target in QEMU."
+  echo "[PASS] FlexOS CachyOS-derived kernel reached multi-user.target in QEMU."
   exit 0
 fi
 
