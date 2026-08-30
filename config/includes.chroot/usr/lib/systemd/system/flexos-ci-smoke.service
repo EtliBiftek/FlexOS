@@ -1,6 +1,5 @@
 [Unit]
 Description=FlexOS CI boot sentinel
-After=multi-user.target
 ConditionKernelCommandLine=flexos.ci=1
 
 [Service]
