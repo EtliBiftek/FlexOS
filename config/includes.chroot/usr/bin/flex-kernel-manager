@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import hashlib, json, os, re, subprocess, sys, tempfile, urllib.request
+from pathlib import Path
+UA={'User-Agent':'FlexOS-kernel-manager/2'}
+
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root.')
+def dpkg(pattern):
+    p=subprocess.run(['dpkg-query','-W','-f=${Package}\t${Version}\t${db:Status-Abbrev}\n',pattern],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+    return [x for x in p.stdout.splitlines() if '\tii' in x]
+def runtime_image(name):return name.startswith('linux-image-') and name.endswith('.deb') and '-dbg_' not in name
+def status():
+    print('active:',subprocess.check_output(['uname','-r'],text=True).strip())
+    for x in dpkg('linux-image-*'):print(x)
+    print('fallback-meta:','installed' if dpkg('linux-image-amd64') else 'missing')
+def fallback():
+    root();subprocess.run(['apt-get','update'],check=True);subprocess.run(['apt-get','install','-y','linux-image-amd64','linux-headers-amd64'],check=True);subprocess.run(['update-grub'],check=False)
+def latest_release():
+    req=urllib.request.Request('https://api.github.com/repos/EtliBiftek/FlexOS/releases/tags/kernel-latest',headers=UA)
+    with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
+def update_cachy():
+    root();rel=latest_release();assets=rel.get('assets',[])
+    wanted=[a for a in assets if runtime_image(a.get('name','')) or (a.get('name','').startswith('linux-headers-') and a.get('name','').endswith('.deb'))]
+    if not any(runtime_image(a.get('name','')) for a in wanted):raise SystemExit('kernel-latest release has no runtime kernel image.')
+    with tempfile.TemporaryDirectory(prefix='flex-kernel-') as td:
+        files=[]
+        for a in wanted:
+            f=Path(td)/a['name'];req=urllib.request.Request(a['browser_download_url'],headers=UA);h=hashlib.sha256()
+            with urllib.request.urlopen(req,timeout=180) as r,open(f,'wb') as o:
+                for b in iter(lambda:r.read(1024*1024),b''):h.update(b);o.write(b)
+            dig=a.get('digest','')
+            if dig.startswith('sha256:') and h.hexdigest()!=dig.split(':',1)[1]:raise SystemExit(f'Kernel asset checksum mismatch: {a["name"]}')
+            files.append(str(f))
+        subprocess.run(['apt-get','install','-y',*files],check=True)
+    subprocess.run(['update-grub'],check=False);print('Latest verified FlexOS CachyOS runtime kernel and headers installed; debug packages were not downloaded.')
+def remove(pkg):
+    root();active=subprocess.check_output(['uname','-r'],text=True).strip()
+    if pkg in ('linux-image-amd64','linux-headers-amd64'):raise SystemExit('Debian fallback meta-package is protected.')
+    if active in pkg:raise SystemExit('Refusing to remove the running kernel.')
+    if not re.fullmatch(r'linux-(?:image|headers)-[A-Za-z0-9.+:~_-]+',pkg):raise SystemExit('Invalid kernel package name.')
+    subprocess.run(['apt-get','remove','-y',pkg],check=True);subprocess.run(['update-grub'],check=False)
+def main():
+    a=sys.argv[1:] or ['status']
+    if a[0] in ('status','list'):status()
+    elif a[0]=='install-fallback':fallback()
+    elif a[0]=='update-cachy':update_cachy()
+    elif a[0]=='remove' and len(a)==2:remove(a[1])
+    else:raise SystemExit('Usage: flex-kernel-manager status|install-fallback|update-cachy|remove <package>')
+if __name__=='__main__':main()

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -u
+if [[ $# -eq 0 ]]; then echo "Usage: flex-game-performance <command> [args...]" >&2; exit 2; fi
+old_scx=""
+scx_changed=0
+if command -v scxctl >/dev/null 2>&1; then
+  old_scx="$(scxctl get 2>/dev/null || true)"
+  if [[ -n "$old_scx" ]]; then scxctl switch -m gaming >/dev/null 2>&1 && scx_changed=1 || true; fi
+fi
+restore_scx(){
+  if [[ $scx_changed -eq 1 ]]; then
+    mode="$(printf '%s' "$old_scx" | grep -Eio 'Auto|Gaming|LowLatency|PowerSave|Server' | head -n1 || true)"
+    [[ -n "$mode" ]] && scxctl switch -m "${mode,,}" >/dev/null 2>&1 || true
+  fi
+}
+trap restore_scx EXIT INT TERM
+if systemctl is-active --quiet ananicy-cpp.service 2>/dev/null && command -v gamemoderun >/dev/null 2>&1; then
+  echo "FlexOS: Ananicy is active; GameMode may also change nice levels. Consider disabling Ananicy for gaming." >&2
+fi
+reason="Launched with FlexOS game performance utility"
+if command -v powerprofilesctl >/dev/null 2>&1 && powerprofilesctl list 2>/dev/null | grep -q 'performance:'; then
+  if [[ -n "${GAME_PERFORMANCE_SCREENSAVER_ON:-}" ]]; then powerprofilesctl launch -p performance -r "$reason" -- "$@"
+  else systemd-inhibit --why "FlexOS game performance is running" powerprofilesctl launch -p performance -r "$reason" -- "$@"; fi
+else "$@"; fi

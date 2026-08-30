@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+command -v scxctl >/dev/null 2>&1 || exit 0
+command -v powerprofilesctl >/dev/null 2>&1 || exit 0
+systemctl is-active --quiet scx_loader.service 2>/dev/null || exit 0
+profile="$(powerprofilesctl get 2>/dev/null || true)"
+case "$profile" in
+  performance) mode=gaming ;;
+  power-saver) mode=powersave ;;
+  balanced) mode=auto ;;
+  *) exit 0 ;;
+esac
+scxctl switch -m "$mode" >/dev/null 2>&1 || true

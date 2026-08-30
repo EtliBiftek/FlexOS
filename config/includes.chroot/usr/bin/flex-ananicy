@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os, shutil, subprocess, sys, tempfile
+from pathlib import Path
+
+ANANICY_REF=os.environ.get('FLEX_ANANICY_REF','v1.2.0')
+RULES_REF=os.environ.get('FLEX_ANANICY_RULES_REF','1.1.47')
+
+
+def run(cmd,check=False,timeout=None,cwd=None):
+    print('+',' '.join(map(str,cmd)),flush=True) if check else None
+    return subprocess.run(cmd,check=check,text=True,timeout=timeout,cwd=cwd)
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root (use pkexec/sudo).')
+def active():return subprocess.run(['systemctl','is-active','--quiet','ananicy-cpp.service']).returncode==0 if shutil.which('systemctl') else False
+
+def status():
+    print('ananicy-cpp:',shutil.which('ananicy-cpp') or 'not installed')
+    print('service:','active' if active() else 'inactive')
+    print('CachyOS rules:','installed' if Path('/etc/ananicy.d/00-default').exists() else 'not installed')
+    if shutil.which('gamemoderun') and active():print('warning: GameMode and Ananicy both alter process priorities; FlexOS does not recommend enabling both for games.')
+def rules():
+    root()
+    with tempfile.TemporaryDirectory(prefix='flex-ananicy-rules-') as td:
+        src=Path(td)/'rules'
+        run(['git','clone','--depth','1','--branch',RULES_REF,'https://github.com/CachyOS/ananicy-rules.git',str(src)],check=True)
+        dst=Path('/etc/ananicy.d');dst.mkdir(parents=True,exist_ok=True)
+        for old in dst.glob('00-default*'):
+            if old.is_dir():shutil.rmtree(old)
+            else:old.unlink()
+        for name in ('00-default','00-types.types','00-cgroups.cgroups','ananicy.conf'):
+            p=src/name
+            if p.is_dir():shutil.copytree(p,dst/name,dirs_exist_ok=True)
+            elif p.exists():shutil.copy2(p,dst/name)
+        lic=Path('/usr/share/doc/flexos/ananicy-rules.LICENSE');lic.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src/'LICENSE',lic)
+        sha=subprocess.check_output(['git','-C',str(src),'rev-parse','HEAD'],text=True).strip()
+        Path('/usr/share/flexos/ananicy-rules-provenance').write_text(f'ref={RULES_REF}\ncommit={sha}\n')
+    if active():subprocess.run(['systemctl','restart','ananicy-cpp.service'])
+    print('CachyOS Ananicy rules updated.')
+def install():
+    root();deps=['git','ca-certificates','build-essential','cmake','pkg-config','libsystemd-dev']
+    run(['apt-get','update'],check=True);run(['apt-get','install','-y','--no-install-recommends',*deps],check=True)
+    with tempfile.TemporaryDirectory(prefix='flex-ananicy-') as td:
+        src=Path(td)/'ananicy-cpp'
+        run(['git','clone','--depth','1','--branch',ANANICY_REF,'https://gitlab.com/ananicy-cpp/ananicy-cpp.git',str(src)],check=True)
+        run(['cmake','-S',str(src),'-B',str(src/'build'),'-DCMAKE_BUILD_TYPE=Release','-DENABLE_SYSTEMD=ON'],check=True,timeout=600)
+        run(['cmake','--build',str(src/'build'),'-j',str(os.cpu_count() or 2)],check=True,timeout=1800)
+        run(['cmake','--install',str(src/'build'),'--component','Runtime'],check=True,timeout=300)
+        sha=subprocess.check_output(['git','-C',str(src),'rev-parse','HEAD'],text=True).strip()
+        Path('/usr/share/flexos').mkdir(parents=True,exist_ok=True);Path('/usr/share/flexos/ananicy-provenance').write_text(f'ref={ANANICY_REF}\ncommit={sha}\n')
+    rules();subprocess.run(['systemctl','daemon-reload']);subprocess.run(['systemctl','disable','--now','ananicy-cpp.service'])
+    print('Ananicy installed but left disabled by default because FlexOS Gaming uses GameMode/SCX. Enable explicitly if desired.')
+def enable():
+    root()
+    if not shutil.which('ananicy-cpp'):raise SystemExit('Install first: sudo flex-ananicy install')
+    if shutil.which('gamemoderun'):print('WARNING: GameMode and Ananicy can compete over nice levels.')
+    run(['systemctl','enable','--now','ananicy-cpp.service'],check=True)
+def disable():root();subprocess.run(['systemctl','disable','--now','ananicy-cpp.service']);print('Ananicy disabled.')
+def main():
+    a=sys.argv[1:] or ['status'];c=a[0]
+    if c=='status':status()
+    elif c=='install':install()
+    elif c in ('update-rules','rules'):rules()
+    elif c=='enable':enable()
+    elif c=='disable':disable()
+    else:raise SystemExit('Usage: flex-ananicy status|install|update-rules|enable|disable')
+if __name__=='__main__':main()

@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os, re, shutil, subprocess, sys, tempfile, time
+from pathlib import Path
+
+CANDIDATES=['https://deb.debian.org/debian','https://ftp.de.debian.org/debian','https://ftp.tr.debian.org/debian','https://ftp.nl.debian.org/debian']
+BACKUP=Path('/var/lib/flexos/mirror-backup')
+
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root.')
+def probe(url):
+    target=url.rstrip('/')+'/dists/trixie/Release'
+    t=time.monotonic()
+    p=subprocess.run(['curl','-LfsS','--max-time','8','--range','0-65535','-o','/dev/null',target],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    return (time.monotonic()-t) if p.returncode==0 else 9999.0
+def rank():
+    rows=sorted((probe(x),x) for x in CANDIDATES)
+    for sec,url in rows:print(f'{sec:6.2f}s  {url}' if sec<9999 else f' failed  {url}')
+    return rows
+def source_files():return [p for p in [Path('/etc/apt/sources.list'),*Path('/etc/apt/sources.list.d').glob('*.list'),*Path('/etc/apt/sources.list.d').glob('*.sources')] if p.exists()]
+def backup():
+    BACKUP.mkdir(parents=True,exist_ok=True)
+    for p in source_files():
+        dst=BACKUP/p.relative_to('/');dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dst)
+def apply(url=None):
+    root();rows=rank();url=url or next((u for s,u in rows if s<9999),None)
+    if not url:raise SystemExit('No reachable Debian mirror.')
+    backup();changed=0
+    pat=re.compile(r'https?://[^\s]+/debian(?=\s|$)')
+    for p in source_files():
+        text=p.read_text(errors='ignore');new=pat.sub(url,text)
+        if new!=text:p.write_text(new);changed+=1
+    if not changed:print('No Debian mirror URI required changing.')
+    subprocess.run(['apt-get','update'])
+    Path('/etc/flexos').mkdir(parents=True,exist_ok=True);Path('/etc/flexos/debian-mirror').write_text(url+'\n')
+    print('Selected mirror:',url)
+def restore():
+    root()
+    if not BACKUP.exists():raise SystemExit('No mirror backup found.')
+    for p in BACKUP.rglob('*'):
+        if p.is_file():
+            dst=Path('/')/p.relative_to(BACKUP);dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dst)
+    subprocess.run(['apt-get','update']);print('Original APT mirror files restored.')
+def status():
+    p=Path('/etc/flexos/debian-mirror');print('selected:',p.read_text().strip() if p.exists() else 'system default')
+def main():
+    a=sys.argv[1:] or ['status']
+    if a[0]=='status':status()
+    elif a[0]=='rank':rank()
+    elif a[0]=='apply':apply(a[1] if len(a)>1 else None)
+    elif a[0]=='restore':restore()
+    else:raise SystemExit('Usage: flex-mirror status|rank|apply [url]|restore')
+if __name__=='__main__':main()

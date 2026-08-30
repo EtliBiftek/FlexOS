@@ -1,0 +1,19 @@
+#!/bin/sh
+set -u
+
+[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" = "btrfs" ] || exit 0
+[ -f /etc/snapper/configs/root ] || exit 0
+command -v snapper >/dev/null 2>&1 || exit 0
+
+state=/run/flexos-package-snapshot-pre
+[ -r "$state" ] || exit 0
+pre="$(cat "$state" 2>/dev/null || true)"
+rm -f "$state"
+case "$pre" in *[!0-9]*|"") exit 0 ;; esac
+
+snapper -c root create --type post --pre-number "$pre" --cleanup-algorithm number \
+    --description "After package transaction" >/dev/null 2>&1 || \
+    snapper -c root create --type post --pre-number "$pre" \
+    --description "After package transaction" >/dev/null 2>&1 || true
+
+exit 0

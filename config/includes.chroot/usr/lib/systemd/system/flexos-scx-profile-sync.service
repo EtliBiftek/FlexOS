@@ -1,0 +1,7 @@
+[Unit]
+Description=Map power-profiles-daemon state to SCX mode
+After=power-profiles-daemon.service scx_loader.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/flexos/flex-scx-profile-sync

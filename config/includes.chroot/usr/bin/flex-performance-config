@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os, subprocess, sys
+from pathlib import Path
+
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root.')
+def reload():
+    subprocess.run(['systemctl','daemon-reload'],check=False);subprocess.run(['sysctl','--system'],check=False)
+def zram(state):
+    root();p=Path('/etc/systemd/zram-generator.conf')
+    if state=='on':p.write_text('[zram0]\ncompression-algorithm = zstd\nzram-size = ram\nswap-priority = 100\nfs-type = swap\n')
+    elif state=='off':p.unlink(missing_ok=True)
+    else:raise SystemExit('zram: on|off')
+    reload();print('zRAM configuration updated; reboot recommended.')
+def swappiness(v):
+    root();v=int(v)
+    if not 1<=v<=200:raise SystemExit('swappiness must be 1..200')
+    p=Path('/etc/sysctl.d/90-flexos-user-performance.conf');p.write_text(f'vm.swappiness={v}\n');subprocess.run(['sysctl','-p',str(p)],check=False)
+def main():
+    a=sys.argv[1:]
+    if len(a)==2 and a[0]=='zram':zram(a[1])
+    elif len(a)==2 and a[0]=='swappiness':swappiness(a[1])
+    else:raise SystemExit('Usage: flex-performance-config zram on|off | swappiness <1..200>')
+if __name__=='__main__':main()

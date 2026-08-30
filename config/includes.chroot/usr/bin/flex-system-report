@@ -2,21 +2,18 @@
 from __future__ import annotations
 import sys,time,zipfile
 from pathlib import Path
-
 sys.path.insert(0,"/usr/lib/flexos")
 from flexsuite import report_text
-
+try:
+    from flexcachy import extended_report
+except Exception:
+    extended_report=lambda:'CachyOS-derived userspace status unavailable.'
 dest=Path(sys.argv[1]) if len(sys.argv)>1 else Path.home()/"Desktop"/f"FlexOS-System-Report-{time.strftime('%Y%m%d-%H%M%S')}.zip"
 dest.parent.mkdir(parents=True,exist_ok=True)
-
 with zipfile.ZipFile(dest,"w",zipfile.ZIP_DEFLATED) as z:
-    z.writestr("report.txt",report_text())
-    for source,name in [
-        (Path("/var/log/flexos-admin.log"),"logs/flexos-admin.log"),
-        (Path("/var/log/flexos-recovery.log"),"logs/flexos-recovery.log"),
-    ]:
+    z.writestr("report.txt",report_text()+"\n\n"+extended_report()+"\n")
+    for source,name in [(Path("/var/log/flexos-admin.log"),"logs/flexos-admin.log"),(Path("/var/log/flexos-recovery.log"),"logs/flexos-recovery.log")]:
         if source.exists() and source.is_file():
             try:z.write(source,name)
             except PermissionError:pass
-
 print(dest)

@@ -1,45 +1,7 @@
 {
-  "minimal": {
-    "name": "Minimal",
-    "packages": [],
-    "description": "KDE Plasma ve FlexOS temel sistemi; ek paket yok."
-  },
-  "standard": {
-    "name": "Standart",
-    "packages": [],
-    "description": "Önerilen FlexOS masaüstü kurulumu."
-  },
-  "gaming": {
-    "name": "Gaming",
-    "packages": [
-      "gamemode",
-      "mangohud",
-      "vulkan-tools"
-    ],
-    "description": "Oyun performansı ve Vulkan izleme araçları."
-  },
-  "developer": {
-    "name": "Geliştirici",
-    "packages": [
-      "git",
-      "build-essential",
-      "cmake",
-      "ninja-build",
-      "pkg-config",
-      "python3-pip",
-      "python3-venv"
-    ],
-    "description": "Derleyiciler, Git, CMake, Ninja ve Python geliştirme araçları."
-  },
-  "creator": {
-    "name": "Creator",
-    "packages": [
-      "blender",
-      "kdenlive",
-      "krita",
-      "inkscape",
-      "audacity"
-    ],
-    "description": "Video, grafik, 3B ve ses üretimi uygulamaları."
-  }
+  "minimal": {"name":"Minimal","packages":[],"description":"KDE Plasma ve FlexOS temel sistemi; ek paket yok."},
+  "standard": {"name":"Standart","packages":[],"description":"Önerilen FlexOS masaüstü kurulumu."},
+  "gaming": {"name":"Gaming","packages":["gamemode","mangohud","goverlay","lutris","vulkan-tools","vkbasalt"],"description":"GameMode, MangoHud, GOverlay, Lutris ve Vulkan araçları. Steam/Gamescope/Proton ayrı Flex Gaming yöneticisinden kurulur."},
+  "developer": {"name":"Geliştirici","packages":["git","build-essential","cmake","ninja-build","pkg-config","python3-pip","python3-venv"],"description":"Derleyiciler, Git, CMake, Ninja ve Python geliştirme araçları."},
+  "creator": {"name":"Creator","packages":["blender","kdenlive","krita","inkscape","audacity"],"description":"Video, grafik, 3B ve ses üretimi uygulamaları."}
 }

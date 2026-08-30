@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import hashlib, json, os, platform, shutil, subprocess, sys, tarfile, tempfile, urllib.request
+from pathlib import Path
+
+UA={'User-Agent':'FlexOS-gaming/1'}
+
+def run(cmd,check=False,timeout=None):
+    print('+',' '.join(map(str,cmd)),flush=True) if check else None
+    return subprocess.run(cmd,check=check,text=True,timeout=timeout)
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root (use pkexec/sudo).')
+def installed(p):return subprocess.run(['dpkg-query','-W','-f=${db:Status-Abbrev}',p],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True).stdout.startswith('ii')
+def apt_has(p):return subprocess.run(['apt-cache','show',p],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+def github_latest(repo):
+    req=urllib.request.Request(f'https://api.github.com/repos/{repo}/releases/latest',headers=UA)
+    with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
+def download_asset(asset,dst):
+    req=urllib.request.Request(asset['browser_download_url'],headers=UA)
+    h=hashlib.sha256()
+    with urllib.request.urlopen(req,timeout=60) as r,open(dst,'wb') as f:
+        while True:
+            b=r.read(1024*1024)
+            if not b:break
+            h.update(b);f.write(b)
+    digest=asset.get('digest') or ''
+    if digest.startswith('sha256:') and h.hexdigest()!=digest.split(':',1)[1]:raise SystemExit(f'Checksum mismatch: {asset["name"]}')
+    return h.hexdigest()
+def ensure_nonfree():
+    for p in (Path('/etc/apt/sources.list'),*Path('/etc/apt/sources.list.d').glob('*.list')):
+        if not p.exists():continue
+        text=p.read_text(errors='ignore');out=[]
+        for line in text.splitlines():
+            if line.lstrip().startswith('deb ') and ' deb.debian.org' in line:
+                parts=line.split(); comps=parts[3:]
+                for c in ('contrib','non-free','non-free-firmware'):
+                    if c not in comps:parts.append(c)
+                line=' '.join(parts)
+            out.append(line)
+        p.write_text('\n'.join(out)+'\n')
+    for p in Path('/etc/apt/sources.list.d').glob('*.sources'):
+        text=p.read_text(errors='ignore');lines=[]
+        for line in text.splitlines():
+            if line.startswith('Components:'):
+                vals=line.split(':',1)[1].split()
+                for c in ('main','contrib','non-free','non-free-firmware'):
+                    if c not in vals:vals.append(c)
+                line='Components: '+' '.join(vals)
+            lines.append(line)
+        p.write_text('\n'.join(lines)+'\n')
+def status():
+    for p in ('gamemode','mangohud','goverlay','lutris','steam-installer','gamescope'):
+        print(f'{p}:', 'installed' if installed(p) else 'not installed')
+    arches=subprocess.run(['dpkg','--print-foreign-architectures'],stdout=subprocess.PIPE,text=True).stdout
+    print('i386 multiarch:','enabled' if 'i386' in arches.split() else 'disabled')
+    print('umu-run:',shutil.which('umu-run') or 'not installed')
+    print('NTSYNC:','active' if Path('/dev/ntsync').exists() or Path('/sys/module/ntsync').exists() else 'not active')
+def core():
+    root();ensure_nonfree();run(['apt-get','update'],check=True)
+    pkgs=[p for p in ('gamemode','mangohud','goverlay','lutris','vulkan-tools','libvulkan1','vkbasalt') if apt_has(p)]
+    run(['apt-get','install','-y',*pkgs],check=True)
+    if subprocess.run(['systemctl','is-active','--quiet','ananicy-cpp.service']).returncode==0:
+        subprocess.run(['systemctl','disable','--now','ananicy-cpp.service']);print('Disabled Ananicy to avoid competing with GameMode process-priority changes.')
+def steam():
+    root();ensure_nonfree()
+    arches=subprocess.run(['dpkg','--print-foreign-architectures'],stdout=subprocess.PIPE,text=True).stdout.split()
+    if 'i386' not in arches:run(['dpkg','--add-architecture','i386'],check=True)
+    run(['apt-get','update'],check=True)
+    pkgs=['steam-installer','steam-devices']
+    gpu=subprocess.run(['lspci'],stdout=subprocess.PIPE,text=True).stdout.lower() if shutil.which('lspci') else ''
+    for p in ('libgl1-mesa-dri:i386','mesa-vulkan-drivers:i386'):
+        if apt_has(p.split(':')[0]):pkgs.append(p)
+    if 'nvidia' in gpu:
+        for p in ('nvidia-driver-libs:i386',):
+            if apt_has(p.split(':')[0]):pkgs.append(p)
+    run(['apt-get','install','-y',*pkgs],check=True)
+def gamescope():
+    root();src=Path('/etc/apt/sources.list.d/flexos-backports.sources')
+    src.write_text('Types: deb\nURIs: https://deb.debian.org/debian\nSuites: trixie-backports\nComponents: main contrib non-free non-free-firmware\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n')
+    run(['apt-get','update'],check=True);run(['apt-get','install','-y','-t','trixie-backports','gamescope'],check=True)
+def heroic():
+    if os.geteuid()==0:raise SystemExit('Run Heroic installation as your desktop user, not root.')
+    if not shutil.which('flatpak'):raise SystemExit('flatpak not installed')
+    run(['flatpak','remote-add','--user','--if-not-exists','flathub','https://flathub.org/repo/flathub.flatpakrepo'],check=True)
+    run(['flatpak','install','--user','-y','flathub','com.heroicgameslauncher.hgl'],check=True)
+def umu():
+    root();rel=github_latest('Open-Wine-Components/umu-launcher');assets=rel.get('assets',[])
+    wanted=[a for a in assets if ('debian-13.deb' in a['name'] and (a['name'].endswith('_amd64_debian-13.deb') or '_all_debian-13.deb' in a['name']))]
+    if not wanted:raise SystemExit('Latest umu-launcher release has no Debian 13 amd64 packages.')
+    with tempfile.TemporaryDirectory(prefix='flex-umu-') as td:
+        files=[]
+        for a in wanted:
+            f=Path(td)/a['name'];download_asset(a,f);files.append(str(f))
+        r=subprocess.run(['apt-get','install','-y',*files])
+        if r.returncode:raise SystemExit('umu-launcher package installation failed')
+    print('umu-launcher installed from official release with GitHub-provided SHA256 verification.')
+def cpu_v3():
+    try:flags=set(next(x.split(':',1)[1].split() for x in Path('/proc/cpuinfo').read_text().splitlines() if x.startswith('flags')))
+    except Exception:return False
+    return {'avx','avx2','bmi1','bmi2','fma','f16c','movbe'} <= flags
+def proton():
+    if os.geteuid()==0:raise SystemExit('Install Proton-CachyOS as your Steam desktop user, not root.')
+    rel=github_latest('CachyOS/proton-cachyos');assets=rel.get('assets',[])
+    suffix='-x86_64_v3.tar.xz' if cpu_v3() else '-x86_64.tar.xz'
+    matches=[a for a in assets if a['name'].endswith(suffix)]
+    if not matches:raise SystemExit('No compatible Proton-CachyOS x86_64 SLR asset in latest release.')
+    asset=matches[0];dest=Path.home()/'.local/share/Steam/compatibilitytools.d';dest.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='flex-proton-') as td:
+        arc=Path(td)/asset['name'];download_asset(asset,arc)
+        with tarfile.open(arc,'r:xz') as t:
+            members=t.getmembers();base=Path(members[0].name).parts[0] if members else ''
+            t.extractall(dest,filter='data')
+        if not base:raise SystemExit('Empty Proton archive')
+    print(f'Installed {asset["name"]} to {dest}. Restart Steam to detect it.')
+def all_root():core();steam();gamescope();umu()
+def main():
+    a=sys.argv[1:] or ['status'];c=a[0]
+    {'status':status,'install-core':core,'install-steam':steam,'install-gamescope':gamescope,'install-heroic':heroic,'install-umu':umu,'install-proton-cachyos':proton,'install-all-root':all_root}.get(c,lambda:(_ for _ in ()).throw(SystemExit('Usage: flex-gaming status|install-core|install-steam|install-gamescope|install-heroic|install-umu|install-proton-cachyos|install-all-root')))()
+if __name__=='__main__':main()

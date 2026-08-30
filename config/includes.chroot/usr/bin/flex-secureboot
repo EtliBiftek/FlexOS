@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os, shutil, subprocess, sys, tempfile
+from pathlib import Path
+
+DIR=Path('/var/lib/flexos/secureboot');KEY=DIR/'MOK.key';PEM=DIR/'MOK.pem';DER=DIR/'MOK.der'
+
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root.')
+def run(cmd,check=False):return subprocess.run(cmd,check=check,text=True)
+def enabled():
+    if not shutil.which('mokutil'):return False
+    p=subprocess.run(['mokutil','--sb-state'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True);return 'enabled' in p.stdout.lower()
+def status():
+    print('Secure Boot:','enabled' if enabled() else 'disabled or unavailable')
+    print('MOK key:','prepared' if KEY.exists() and DER.exists() else 'not prepared')
+    if shutil.which('mokutil') and DER.exists():subprocess.run(['mokutil','--test-key',str(DER)])
+def setup():
+    root();run(['apt-get','update'],check=True);run(['apt-get','install','-y','openssl','mokutil','sbsigntool','dkms','zstd','xz-utils'],check=True)
+    DIR.mkdir(parents=True,exist_ok=True);os.chmod(DIR,0o700)
+    if not KEY.exists():
+        run(['openssl','req','-new','-x509','-newkey','rsa:3072','-nodes','-days','3650','-subj','/CN=FlexOS Local Module Signing/','-keyout',str(KEY),'-out',str(PEM)],check=True)
+        run(['openssl','x509','-outform','DER','-in',str(PEM),'-out',str(DER)],check=True)
+    os.chmod(KEY,0o600);os.chmod(PEM,0o644);os.chmod(DER,0o644)
+    d=Path('/etc/dkms/framework.conf.d');d.mkdir(parents=True,exist_ok=True)
+    (d/'flexos-secureboot.conf').write_text(f'mok_signing_key="{KEY}"\nmok_certificate="{DER}"\n')
+    print('MOK key prepared. Run `sudo flex-secureboot enroll` and complete MOK enrollment at next reboot.')
+def enroll():root();
+
+def do_enroll():
+    root()
+    if not DER.exists():setup()
+    run(['mokutil','--import',str(DER)],check=True);print('Enrollment requested. Choose the MOK enrollment option at reboot and enter the password you just supplied.')
+def sign_one_kernel(path):
+    if not shutil.which('sbsign'):raise SystemExit('sbsign missing; run flex-secureboot setup-mok')
+    p=Path(path)
+    if not p.exists():raise SystemExit(f'Kernel not found: {p}')
+    tmp=p.with_suffix(p.suffix+'.flexsigned')
+    run(['sbsign','--key',str(KEY),'--cert',str(PEM),'--output',str(tmp),str(p)],check=True);os.replace(tmp,p);print('signed kernel:',p)
+def sign_kernels(one=None):
+    root()
+    if not KEY.exists():raise SystemExit('MOK key not prepared.')
+    paths=[Path(one)] if one else sorted(Path('/boot').glob('vmlinuz-*flexos-cachy*'))
+    for p in paths:sign_one_kernel(p)
+def sign_modules():
+    root()
+    if not KEY.exists():raise SystemExit('MOK key not prepared.')
+    k=subprocess.check_output(['uname','-r'],text=True).strip();sf=Path('/usr/src')/f'linux-headers-{k}'/'scripts/sign-file'
+    if not sf.exists():raise SystemExit(f'Kernel sign-file missing for {k}; install matching headers.')
+    mods=list((Path('/lib/modules')/k/'updates/dkms').rglob('*.ko*')) if (Path('/lib/modules')/k/'updates/dkms').exists() else []
+    for mod in mods:
+        suffix=mod.suffix;raw=mod
+        if suffix=='.zst':subprocess.run(['zstd','-d','-f',str(mod),'-o',str(mod.with_suffix(''))],check=True);raw=mod.with_suffix('')
+        elif suffix=='.xz':subprocess.run(['xz','-d','-f','-k',str(mod)],check=True);raw=mod.with_suffix('')
+        run([str(sf),'sha256',str(KEY),str(DER),str(raw)],check=True)
+        if suffix=='.zst':subprocess.run(['zstd','-q','-f',str(raw),'-o',str(mod)],check=True);raw.unlink(missing_ok=True)
+        elif suffix=='.xz':subprocess.run(['xz','-f','-k',str(raw)],check=True);shutil.move(str(raw)+'.xz',mod);raw.unlink(missing_ok=True)
+        print('signed module:',mod)
+    subprocess.run(['depmod','-a',k]);print(f'Signed {len(mods)} DKMS modules.')
+def main():
+    a=sys.argv[1:] or ['status'];c=a[0]
+    if c=='status':status()
+    elif c=='setup-mok':setup()
+    elif c=='enroll':do_enroll()
+    elif c=='sign-kernels':sign_kernels(a[1] if len(a)>1 else None)
+    elif c=='sign-one' and len(a)==2:sign_kernels(a[1])
+    elif c=='sign-modules':sign_modules()
+    else:raise SystemExit('Usage: flex-secureboot status|setup-mok|enroll|sign-kernels [path]|sign-modules')
+if __name__=='__main__':main()

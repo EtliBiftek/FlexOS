@@ -1,0 +1,11 @@
+[Unit]
+Description=FlexOS performance capability setup
+After=systemd-sysctl.service systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/flexos/flex-performance-apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,66 @@
+name: Promote Validated CachyOS Kernel
+
+on:
+  push:
+    branches: [feature/cachyos-stack]
+    paths: ['.github/kernel-promotion.env']
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: flexos-kernel-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate promotion source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .github/kernel-promotion.env
+          current="$(git hash-object scripts/build-cachyos-kernel.sh)"
+          test "$current" = "$BUILDER_GIT_BLOB" || { echo 'Kernel builder changed since validated artifact build.' >&2;exit 1; }
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT";echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT";echo "builder_blob=$BUILDER_GIT_BLOB" >> "$GITHUB_OUTPUT"
+      - name: Download and validate previously built artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.source.outputs.run_id }}
+          ARTIFACT_NAME: ${{ steps.source.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          rm -rf dist/kernel;mkdir -p dist/kernel
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir dist/kernel
+          test -s dist/kernel/KERNEL_INFO;test -s dist/kernel/SHA256SUMS
+          (cd dist/kernel && sha256sum -c SHA256SUMS)
+      - name: Keep only runtime kernel assets and add provenance
+        env:
+          RUN_ID: ${{ steps.source.outputs.run_id }}
+          BUILDER_BLOB: ${{ steps.source.outputs.builder_blob }}
+        run: |
+          set -euo pipefail
+          rm -f dist/kernel/linux-image-*-dbg_*.deb
+          compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null
+          compgen -G 'dist/kernel/linux-headers-*.deb' >/dev/null
+          printf 'validated_workflow_run=%s\nbuilder_git_blob=%s\npromoted_at=%s\n' "$RUN_ID" "$BUILDER_BLOB" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> dist/kernel/KERNEL_INFO
+          (cd dist/kernel && sha256sum linux-image-*.deb linux-headers-*.deb KERNEL_INFO > SHA256SUMS)
+          (cd dist/kernel && sha256sum -c SHA256SUMS)
+      - name: Replace kernel-latest with runtime-only assets
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot];git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -f kernel-latest "$GITHUB_SHA";git push --force origin refs/tags/kernel-latest
+          if gh release view kernel-latest >/dev/null 2>&1; then
+            while IFS= read -r asset; do [[ -n "$asset" ]] && gh release delete-asset kernel-latest "$asset" -y;done < <(gh release view kernel-latest --json assets --jq '.assets[].name')
+            gh release edit kernel-latest --title 'FlexOS CachyOS Kernel' --prerelease --notes-file dist/kernel/KERNEL_INFO
+          else
+            gh release create kernel-latest --title 'FlexOS CachyOS Kernel' --prerelease --notes-file dist/kernel/KERNEL_INFO
+          fi
+          gh release upload kernel-latest dist/kernel/KERNEL_INFO dist/kernel/SHA256SUMS dist/kernel/linux-image-*.deb dist/kernel/linux-headers-*.deb --clobber

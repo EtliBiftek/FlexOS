@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import json, os, shutil, subprocess, sys, tempfile
+from pathlib import Path
+
+CFG=Path('/etc/flexos/scx.json')
+LOADER_CFG=Path('/etc/scx_loader/config.toml')
+MODES={'auto':'Auto','gaming':'Gaming','lowlatency':'LowLatency','powersave':'PowerSave','server':'Server'}
+SCX_REF=os.environ.get('FLEX_SCX_REF','v1.1.1')
+
+
+def run(cmd, check=False, timeout=None, env=None):
+    print('+',' '.join(map(str,cmd)), flush=True) if check else None
+    return subprocess.run(cmd,text=True,check=check,timeout=timeout,env=env)
+
+def out(cmd):
+    try:return subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=20).stdout.strip()
+    except Exception:return ''
+
+def root():
+    if os.geteuid()!=0: raise SystemExit('This action requires root (use pkexec/sudo).')
+
+def supported(): return Path('/sys/kernel/sched_ext').exists() or Path('/sys/kernel/sched_ext/root/ops').exists()
+
+def load_cfg():
+    try:return json.loads(CFG.read_text())
+    except Exception:return {'enabled':False,'scheduler':'scx_lavd','mode':'Auto'}
+
+def save_cfg(d):
+    CFG.parent.mkdir(parents=True,exist_ok=True);CFG.write_text(json.dumps(d,indent=2)+'\n')
+
+def normalize_sched(s): return s if s.startswith('scx_') else 'scx_'+s
+
+def normalize_mode(m):
+    k=m.replace('-','').replace('_','').lower()
+    for key,val in MODES.items():
+        if k==key:return val
+    raise SystemExit('Mode must be Auto, Gaming, LowLatency, PowerSave or Server.')
+
+def installed_schedulers():
+    if shutil.which('scxctl'):
+        text=out(['scxctl','list'])
+        if text:return text
+    found=[]
+    for d in os.environ.get('PATH','').split(':'):
+        try:
+            for p in Path(d).glob('scx_*'):
+                if p.name not in {'scx_loader','scxctl','scxtui','scx_top','scxtop'} and os.access(p,os.X_OK):found.append(p.name)
+        except Exception:pass
+    return '\n'.join(sorted(set(found))) or 'No scheduler binaries installed.'
+
+def write_loader_config(scheduler,mode):
+    LOADER_CFG.parent.mkdir(parents=True,exist_ok=True)
+    LOADER_CFG.write_text(f'default_sched = "{scheduler}"\ndefault_mode = "{mode}"\n')
+
+def status():
+    d=load_cfg()
+    print('sched_ext:', 'available' if supported() else 'unavailable')
+    print('configured:',d.get('scheduler'),d.get('mode'),'enabled='+str(d.get('enabled',False)).lower())
+    print('scx_loader:',out(['systemctl','is-active','scx_loader.service']) or 'inactive')
+    if shutil.which('scxctl'): print('runtime:',out(['scxctl','get']) or 'no active scheduler')
+    else: print('runtime: scxctl not installed')
+
+def apply(scheduler,mode):
+    root()
+    if not supported(): raise SystemExit('Active kernel does not expose sched_ext; keeping in-kernel scheduler.')
+    if not shutil.which('scxctl'): raise SystemExit('SCX userspace is not installed. Run: sudo flex-scx install')
+    scheduler=normalize_sched(scheduler); mode=normalize_mode(mode)
+    write_loader_config(scheduler,mode)
+    run(['systemctl','enable','--now','scx_loader.service'],check=True)
+    current=out(['scxctl','get'])
+    cli_mode=mode.lower()
+    cmd=['scxctl','switch','-s',scheduler,'-m',cli_mode] if current else ['scxctl','start','-s',scheduler,'-m',cli_mode]
+    r=subprocess.run(cmd)
+    if r.returncode:
+        subprocess.run(['scxctl','stop'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        raise SystemExit('SCX failed to attach. In-kernel scheduler remains active.')
+    d={'enabled':True,'scheduler':scheduler,'mode':mode};save_cfg(d)
+    print(f'Active SCX: {scheduler} / {mode}')
+
+def set_mode(mode):
+    root(); mode=normalize_mode(mode);d=load_cfg()
+    if not shutil.which('scxctl'):raise SystemExit('scxctl not installed')
+    if subprocess.run(['scxctl','switch','-m',mode.lower()]).returncode:raise SystemExit('Mode switch failed')
+    d['mode']=mode;d['enabled']=True;save_cfg(d);write_loader_config(d.get('scheduler','scx_lavd'),mode)
+
+def disable():
+    root()
+    if shutil.which('scxctl'):subprocess.run(['scxctl','stop'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['systemctl','disable','--now','scx_loader.service'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    d=load_cfg();d['enabled']=False;save_cfg(d);print('SCX disabled; kernel scheduler is active.')
+
+def install():
+    root()
+    if not supported():print('WARNING: current kernel does not expose sched_ext; installing userspace for a compatible FlexOS kernel.')
+    deps=['git','ca-certificates','build-essential','cmake','cargo','rustc','clang','llvm','pkg-config','libelf-dev','libbpf-dev','libseccomp-dev','protobuf-compiler','pahole']
+    run(['apt-get','update'],check=True);run(['apt-get','install','-y','--no-install-recommends',*deps],check=True)
+    with tempfile.TemporaryDirectory(prefix='flex-scx-') as td:
+        td=Path(td)
+        loader=td/'scx-loader'
+        run(['git','clone','--depth','1','https://github.com/sched-ext/scx-loader.git',str(loader)],check=True)
+        sha=out(['git','-C',str(loader),'rev-parse','HEAD'])
+        env=os.environ.copy();env.update({'VENDOR_PREFIX':'/usr','VENDOR_DATADIR':'/usr/share','VENDOR_SYSCONFDIR':'/etc','VENDOR_LIBDIR':'/usr/lib'})
+        run(['cargo','xtask','install'],check=True,timeout=3600,env=env) if (loader/'xtask').exists() else run(['cargo','build','--release'],check=True,timeout=3600,env=env)
+        if not shutil.which('scx_loader'):
+            for name in ('scx_loader','scxctl','scxtui'):
+                candidates=list((loader/'target/release').rglob(name))
+                if candidates:run(['install','-Dm755',str(candidates[0]),f'/usr/bin/{name}'],check=True)
+        scx=td/'scx'
+        run(['git','clone','--depth','1','--branch',SCX_REF,'https://github.com/sched-ext/scx.git',str(scx)],check=True)
+        installed=[]
+        for name in ('scx_lavd','scx_bpfland','scx_rusty','scx_flash','scx_cosmos','scx_cake'):
+            p=scx/'scheds/rust'/name
+            if (p/'Cargo.toml').exists():
+                r=subprocess.run(['cargo','install','--locked','--root','/usr','--path',str(p)],timeout=3600)
+                if r.returncode==0:installed.append(name)
+        Path('/usr/share/flexos').mkdir(parents=True,exist_ok=True)
+        Path('/usr/share/flexos/scx-provenance').write_text(f'loader_commit={sha}\nscx_ref={SCX_REF}\nschedulers={" ".join(installed)}\n')
+    if not shutil.which('scxctl'):raise SystemExit('scx_loader build completed but scxctl was not installed.')
+    d=load_cfg();write_loader_config(d.get('scheduler','scx_lavd'),d.get('mode','Auto'))
+    subprocess.run(['systemctl','daemon-reload']);print('SCX userspace installed. Enable it from Flex Center or flex-scx set.')
+
+def main():
+    a=sys.argv[1:]
+    if not a or a[0]=='status':return status()
+    if a[0]=='list':print(installed_schedulers());return
+    if a[0]=='install':return install()
+    if a[0]=='disable':return disable()
+    if a[0]=='set' and len(a)>=2:
+        d=load_cfg();return apply(a[1],a[2] if len(a)>2 else d.get('mode','Auto'))
+    if a[0]=='mode' and len(a)==2:return set_mode(a[1])
+    raise SystemExit('Usage: flex-scx status|list|install|set <scheduler> [mode]|mode <mode>|disable')
+if __name__=='__main__':main()
