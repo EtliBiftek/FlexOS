@@ -1,0 +1,93 @@
+name: Build FlexOS CachyOS Kernel Variant
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: CachyOS kernel variant
+        required: true
+        type: choice
+        options: [default, bore, bmq, deckify, eevdf, hardened, lts, rc, rt-bore, server]
+        default: bore
+      cpu:
+        description: CPU target
+        required: true
+        type: choice
+        options: [generic, v3, v4, zen4, native]
+        default: generic
+      lto:
+        description: LLVM LTO override
+        required: true
+        type: choice
+        options: [upstream, none, thin, full, thin-dist]
+        default: upstream
+      kcfi:
+        description: Enable Clang kCFI
+        required: true
+        type: boolean
+        default: false
+      publish:
+        description: Publish/replace the variant rolling release
+        required: true
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: flexos-cachyos-variant-${{ inputs.variant }}-${{ inputs.cpu }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reclaim runner disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+      - name: Build Debian kernel variant
+        env:
+          VARIANT: ${{ inputs.variant }}
+          FLEXOS_KERNEL_CPU: ${{ inputs.cpu }}
+          FLEXOS_KERNEL_LTO: ${{ inputs.lto }}
+          FLEXOS_KERNEL_KCFI: ${{ inputs.kcfi && '1' || '0' }}
+        run: |
+          chmod +x scripts/build-cachyos-kernel-variant.sh
+          docker run --rm -e VARIANT -e FLEXOS_KERNEL_CPU -e FLEXOS_KERNEL_LTO -e FLEXOS_KERNEL_KCFI -v "$PWD:/workspace" -w /workspace debian:13 bash -lc '
+            set -eux
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential bc bison flex patch libssl-dev libelf-dev libdw-dev dwarves libncurses-dev rsync cpio kmod fakeroot dpkg-dev debhelper pkg-config clang llvm lld rustc bindgen libclang-dev zstd xz-utils ca-certificates curl git python3 gnupg dirmngr
+            ./scripts/build-cachyos-kernel-variant.sh "$VARIANT" "dist/kernel-$VARIANT"
+          '
+      - name: Validate variant package set
+        env: {VARIANT: '${{ inputs.variant }}'}
+        run: |
+          set -eux
+          d="dist/kernel-$VARIANT"
+          test -s "$d/KERNEL_INFO"; test -s "$d/SHA256SUMS"
+          grep -q '^source_signature=verified$' "$d/KERNEL_INFO"
+          grep -q "^flexos_variant=$VARIANT$" "$d/KERNEL_INFO"
+          ! compgen -G "$d/linux-image-*-dbg_*.deb" >/dev/null
+          compgen -G "$d/linux-image-*.deb" >/dev/null
+          compgen -G "$d/linux-headers-*.deb" >/dev/null
+          (cd "$d" && sha256sum -c SHA256SUMS)
+      - name: Upload variant artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlexOS-CachyOS-${{ inputs.variant }}-${{ inputs.cpu }}-${{ github.sha }}
+          path: dist/kernel-${{ inputs.variant }}/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish rolling variant release
+        if: ${{ inputs.publish }}
+        env: {GH_TOKEN: '${{ github.token }}', VARIANT: '${{ inputs.variant }}', CPU: '${{ inputs.cpu }}'}
+        run: |
+          set -eux
+          if [[ "$VARIANT" == default && "$CPU" == generic ]]; then tag=kernel-latest; else tag="kernel-${VARIANT}-${CPU}-latest"; fi
+          d="dist/kernel-$VARIANT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            while IFS= read -r asset; do [[ -n "$asset" ]] && gh release delete-asset "$tag" "$asset" -y; done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+            gh release edit "$tag" --title "FlexOS CachyOS Kernel: $VARIANT/$CPU" --prerelease --notes-file "$d/KERNEL_INFO"
+          else
+            gh release create "$tag" --title "FlexOS CachyOS Kernel: $VARIANT/$CPU" --prerelease --notes-file "$d/KERNEL_INFO"
+          fi
+          gh release upload "$tag" "$d"/* --clobber

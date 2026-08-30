@@ -1,0 +1,11 @@
+[Unit]
+Description=Apply saved FlexOS wireless regulatory domain
+After=NetworkManager.service
+ConditionPathExists=/etc/flexos/regdomain
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flex-regdomain apply-saved
+
+[Install]
+WantedBy=multi-user.target

@@ -1,134 +1,95 @@
 # FlexOS CachyOS Integration
 
-FlexOS remains a Debian 13/Trixie distribution. CachyOS is used as an upstream for the kernel and for performance/gaming design ideas; Arch repositories and `.pkg.tar.zst` packages are never mixed into the Debian root.
+FlexOS remains a Debian 13/Trixie distribution. CachyOS is used as an upstream for kernel technology and performance/gaming design; Arch repositories and `.pkg.tar.zst` packages are never mixed into the Debian root.
 
 ## Current status
 
-The initial CachyOS-derived FlexOS kernel successfully completed real GitHub CI as native Debian `linux-image`/`linux-headers` packages. The userspace feature layer below is implemented on `feature/cachyos-stack` and has a dedicated lightweight validation workflow so ordinary userspace changes do not rebuild the kernel.
+The CachyOS-derived FlexOS stack is merged to `main`. The default kernel completed a real GitHub CI build as native Debian `linux-image`/`linux-headers` packages and is published as `kernel-latest`. Userspace parity has separate lightweight validation so ordinary desktop changes do not trigger a multi-hour kernel compile.
 
-## 1. Kernel — implemented
+## Kernel — implemented
 
-- CachyOS `linux-cachyos` source/config ingestion with official maintainer PGP verification.
-- Debian-native image/header `.deb` output and `-flexos-cachy` local version.
-- Generic portable CPU target for the ISO instead of `-march=native`.
-- Cachy/BORE configuration retained where supported.
-- Custom kernel becomes the live default while Debian `linux-image-amd64` remains installed as fallback.
-- `kernel-latest` rolling release/fetch/checksum architecture.
-- Kernel CI only watches the kernel build source. Userspace/UI changes do not trigger a multi-hour kernel compile.
-- Weekly lightweight upstream watcher triggers a kernel build only when CachyOS changes the source release.
+- Official CachyOS source/config ingestion with maintainer PGP verification and Debian-native `.deb` output.
+- The generic default is the ISO kernel; Debian `linux-image-amd64` remains a protected fallback.
+- Weekly upstream watcher rebuilds only when the source release changes.
+- Extended manual matrix: default, BORE, BMQ, Deckify, EEVDF, Hardened, LTS, RC, RT-BORE and Server.
+- Variant builds apply scheduler/hardening/RT patch URLs selected by the current upstream PKGBUILD while producing Debian packages.
+- CPU targets: generic, x86-64-v3, x86-64-v4, Zen4 and native.
+- LLVM modes: upstream, none, ThinLTO, Full LTO and distributed ThinLTO; optional kCFI.
+- Advanced profile hooks: HZ, preemption, THP, AutoFDO instrumentation/profile input and Propeller profile input.
+- Experimental/specialized variants use independent rolling releases and never silently replace the universal ISO default.
 
-## 2. System performance policy — implemented
+## System performance — implemented
 
-- zstd ZRAM sized to RAM, priority 100.
-- CachyOS-derived sysctl values, journal cap and systemd limits/timeouts.
-- Runtime BBR/FQ, NTSYNC and sched_ext capability detection.
-- `flexos-performance.service`, `flex-kernel-info`, `flex-performance-config`.
+- zstd ZRAM sized to RAM, priority 100; CachyOS-derived sysctl/systemd/journald policy; BBR/FQ/NTSYNC capability handling.
+- sched_ext/SCX manager with Auto/Gaming/LowLatency/PowerSave/Server modes and power-profile synchronization.
+- Ananicy-cpp + CachyOS rules, kept optional to avoid GameMode priority conflicts.
+- `flex-game-performance`, `flex-performance-config` and kernel diagnostics.
+- Optional `flex-pci-latency` reproduces CachyOS PCI audio-latency tuning but is never enabled globally by default.
+- `flex-regdomain` persists only an explicitly selected ISO country code; no geolocation guessing.
+- `flex-zink-run` and `flex-topmem` provide the portable CachyOS helper behavior on Debian.
 
-## 3. sched_ext / SCX — implemented
+## Gaming — implemented
 
-- `flex-scx` status/list/install/set/mode/disable manager.
-- Upstream `sched-ext/scx-loader` integration (`scx_loader`, `scxctl`, `scxtui`).
-- Stable sched-ext scheduler source install path with LAVD, bpfland, rusty, flash, cosmos and cake when available.
-- Auto, Gaming, LowLatency, PowerSave and Server modes.
-- Safe fallback to the in-kernel scheduler when sched_ext attach fails or is unsupported.
-- power-profiles-daemon mapping via `flexos-scx-profile-sync.timer`: balanced→Auto, performance→Gaming, power-saver→PowerSave.
-- `flex-game-performance` temporarily switches an active SCX scheduler to Gaming and restores the previous mode.
+- GameMode, MangoHud, GOverlay, Lutris, Vulkan tools, vkBasalt.
+- Steam with Debian i386 multiarch and 32-bit Mesa/Vulkan.
+- Gamescope via Trixie Backports; Heroic via Flathub; verified umu-launcher.
+- Checksum-verified Proton-CachyOS x86_64/x86_64-v3 installer.
+- NTSYNC diagnostics.
+- `flex-dlss-run` provides the CachyOS DLSS latest-preset environment, with optional NGX updater; `flex-zink-run` provides Zink launch mode.
 
-SCX source builds are optional and never make the base ISO depend on a Rust build succeeding.
+## Hardware / drivers — implemented
 
-## 4. Process prioritization / Ananicy — implemented
+`flex-hwd` handles safe firmware/Mesa/microcode plus explicit NVIDIA proprietary, NVIDIA open-DKMS and Nouveau profiles. Driver switching is snapshot-aware, requires matching headers, checks Secure Boot/MOK readiness and can sign DKMS modules. Handheld detection covers Steam Deck, ROG Ally, Legion Go and generic handheld families with a safe hardware-gated profile.
 
-- `flex-ananicy` install/status/enable/disable/update-rules manager.
-- ananicy-cpp is built with systemd support from its tagged upstream source.
-- CachyOS ananicy-rules are installed from a tagged source and provenance is recorded.
-- It is left disabled by default when installed because GameMode and Ananicy can compete over process nice levels; Flex Center warns about this combination.
+## Snapshots / recovery — implemented
 
-## 5. Gaming stack — implemented
+Snapper root setup, paired APT/dpkg pre/post snapshots, update/driver snapshots, Flex Center create/delete/rollback and protected Debian fallback kernel.
 
-`flex-gaming` provides independent install actions for:
+## Flex Center / app equivalents — implemented
 
-- GameMode, MangoHud, GOverlay, Lutris, Vulkan tools and vkBasalt.
-- Steam with Debian i386 multiarch and 32-bit Mesa/Vulkan support.
-- Gamescope from Trixie Backports.
-- Heroic through Flathub.
-- official umu-launcher Debian 13 release packages with GitHub-provided SHA256 verification.
-- Proton-CachyOS Steam Linux Runtime x86_64/x86_64-v3 release assets with SHA256 verification and per-user Steam compatibility-tool installation.
-- NTSYNC status is surfaced in diagnostics.
+Flex Center replaces duplicate CachyOS-branded management apps: SCX/Ananicy, Gaming, drivers, kernel manager, mirror ranking, optimized repositories, Secure Boot/MOK, handhelds, snapshots, updates and diagnostics are integrated in one application. Advanced RC/RT/native kernel compilation remains a maintainer-CI action to prevent accidental experimental installs.
 
-No Arch gaming repository is added.
+## Kernel Manager — implemented
 
-## 6. Hardware detection / driver policy — implemented
+`flex-kernel-manager` protects the running kernel and Debian fallback, installs the verified `kernel-latest` default, lists separately published variants and installs `install <variant> [cpu]`. Downloads are checked against GitHub asset digests when exposed and against release `SHA256SUMS`.
 
-`flex-hwd` detects CPU/GPU/network hardware and safe firmware/Mesa/microcode packages. It also provides explicit NVIDIA profiles:
+## Secure Boot — implemented
 
-- proprietary Debian NVIDIA driver;
-- NVIDIA open kernel DKMS;
-- Nouveau fallback.
+`flex-secureboot` generates a local root-only MOK key, requests enrollment, configures DKMS signing, signs DKMS modules and installed FlexOS CachyOS kernels and hooks future kernel installation. No private signing key is stored in Git.
 
-NVIDIA switches create a Btrfs/Snapper snapshot when possible, require matching active-kernel headers for DKMS, check Secure Boot readiness, refresh initramfs/depmod and can sign DKMS modules when a FlexOS MOK exists.
+## Mirrors / optimized repositories — implemented
 
-Handheld DMI detection covers Steam Deck, ROG Ally, Legion Go and common generic handheld families; a safe handheld performance profile can be applied without installing vendor-specific Arch packages.
+`flex-mirror` benchmarks HTTPS Debian mirrors with rollback. `flex-repo` selects baseline/v3/v4/Zen4 only after signed `InRelease` health validation. The optimized repository workflow rebuilds selected Debian source packages and publishes signed profile branches.
 
-## 7. Btrfs / Snapper — implemented
+## CachyOS Settings helper parity — implemented
 
-- Root Snapper setup for supported Btrfs subvolume layouts.
-- Paired APT/dpkg pre/post snapshots.
-- Driver/system-update snapshots.
-- Flex Center create/delete/rollback controls.
-- Debian fallback kernel is protected from the Flex kernel manager removal path.
+- bugreport/kernel inspection → `flex-system-report`, `flex-kernel-info`, Flex Doctor.
+- topmem → `flex-topmem`.
+- zink-run → `flex-zink-run`.
+- dlss-swapper → `flex-dlss-run`.
+- pci-latency → opt-in `flex-pci-latency`/service.
+- regulatory-domain handling → `flex-regdomain`/service.
+- sbctl batch signing → `flex-secureboot`.
 
-## 8. Flex Center management UX — implemented
+## QA / release behavior — implemented
 
-Flex Center now exposes:
-
-- SCX scheduler/mode controls and installer;
-- Ananicy controls;
-- zRAM/swappiness;
-- Gaming stack installers;
-- `flex-hwd` safe packages and all NVIDIA modes;
-- CachyOS kernel status/update and Debian fallback repair;
-- mirror ranking and optimized-repository auto selection;
-- Secure Boot/MOK preparation, enrollment, kernel signing and DKMS signing;
-- handheld profile controls;
-- existing update, snapshot, recovery, privacy, app/profile and diagnostics pages.
-
-## 9. Kernel Manager equivalent — implemented
-
-`flex-kernel-manager` lists the active/installed kernel set, protects the Debian fallback meta-package and running kernel, repairs the fallback kernel, and installs `kernel-latest` FlexOS CachyOS kernel assets with release SHA256 verification.
-
-## 10. Secure Boot / module signing — implemented
-
-`flex-secureboot` can:
-
-- report state;
-- generate a local 3072-bit MOK key with the private key restricted to root;
-- request MOK enrollment through `mokutil`;
-- configure DKMS to reuse that key;
-- sign compressed/uncompressed DKMS modules;
-- sign installed `vmlinuz-*flexos-cachy` images with `sbsign`;
-- automatically sign newly installed FlexOS CachyOS kernels when the local MOK is prepared.
-
-The private signing key is never stored in the Git repository.
-
-## 11. Mirror ranking and optimized APT repositories — implemented framework + publication pipeline
-
-- `flex-mirror` benchmarks HTTPS Debian mirrors, backs up APT source files, applies only Debian mirror URI changes and can restore the backup.
-- `flex-repo` detects baseline/x86-64-v3/x86-64-v4 capability and Zen4-class targets, verifies `InRelease` availability before enabling a profile, and automatically falls back to baseline if an optimized repository is absent or invalid.
-- `build-optimized-repo.yml` can rebuild selected Debian source packages with x86-64-v3, x86-64-v4 or znver4 flags, create a signed APT repository and publish it to `apt-v3`, `apt-v4` or `apt-zen4`.
-
-The selector never points a machine at an unpublished repository. Optimized branches become selectable only after a signed `InRelease` exists.
-
-## 12. QA / release behavior — implemented
-
-- `validate-cachyos-stack.sh` checks Python/shell syntax, JSON manifests, package ownership, kernel fallback, ZRAM/sysctl policy, SCX modes, Steam multiarch, Gamescope backports, Proton source, Secure Boot/MOK, NVIDIA modes, Flex Center wiring and the no-Arch-repo rule.
-- `validate-cachyos-userspace.yml` runs on PR userspace changes and builds every FlexOS component `.deb` without compiling the kernel.
-- The expensive kernel CI is isolated from normal FlexOS work.
+- `validate-cachyos-stack.sh`: default integration invariants.
+- `validate-cachyos-userspace.yml`: userspace syntax and every FlexOS component `.deb`.
+- `validate-cachyos-parity.sh`: extended kernel matrix/helper layer.
+- `build-cachyos-kernel-variants.yml`: manual matrix builder because every variant can consume hours of CI.
+- Normal ISO pipeline: source/package validation, ISO structural smoke test and QEMU live-kernel boot test.
 
 ## Release rules
 
-1. FlexOS identity/branding always remains FlexOS.
+1. FlexOS branding/identity always remains FlexOS.
 2. Debian fallback kernel stays installed.
-3. A driver switch must not silently bypass Secure Boot/DKMS safety.
-4. Optimized repositories must pass signed `InRelease` health checking before selection.
-5. External release downloads used by FlexOS management tools must be checksum-verified where the upstream API exposes a digest.
-6. Base installation must remain bootable when optional SCX/Ananicy/gaming components are absent.
+3. Driver switching may not bypass Secure Boot/DKMS safety.
+4. Optimized repositories require signed `InRelease` validation.
+5. External release downloads are checksum-verified where upstream exposes a digest/checksum.
+6. Optional SCX/Ananicy/gaming/helper components may not make the base install unbootable.
+7. RC, RT, native-CPU and architecture-specialized kernels are never the universal ISO default.
+8. Device-specific settings remain opt-in or hardware-gated.
+
+## Definition of parity
+
+“CachyOS feature parity” means providing the useful capability with Debian-native packaging, services and FlexOS safety rules. Arch/pacman infrastructure, CachyOS branding and hardware-specific assumptions are not copied literally. Where a CachyOS helper is already covered by a stronger integrated FlexOS tool, FlexOS keeps one implementation instead of duplicating branded commands.

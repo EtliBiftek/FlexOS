@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os,re,shutil,subprocess,sys
+from pathlib import Path
+STATE=Path('/etc/flexos/regdomain')
+def country(s):
+    s=s.upper()
+    if not re.fullmatch(r'[A-Z]{2}',s):raise SystemExit('Country must be an ISO-3166 alpha-2 code, e.g. TR, DE, US.')
+    return s
+def apply(cc,persist=True):
+    if os.geteuid()!=0:raise SystemExit('root required')
+    if not shutil.which('iw'):raise SystemExit('iw is not installed')
+    subprocess.run(['iw','reg','set',cc],check=True)
+    if persist:
+        STATE.parent.mkdir(parents=True,exist_ok=True);STATE.write_text(cc+'\n')
+        if shutil.which('systemctl'):subprocess.run(['systemctl','enable','flexos-regdomain.service'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+def status():
+    if shutil.which('iw'):subprocess.run(['iw','reg','get'])
+    print('persisted:',STATE.read_text().strip() if STATE.exists() else 'unset')
+def main():
+    a=sys.argv[1:] or ['status']
+    if a[0]=='status':status()
+    elif a[0]=='set' and len(a)==2:apply(country(a[1]))
+    elif a[0]=='apply-saved' and STATE.exists():apply(country(STATE.read_text().strip()),False)
+    elif a[0]=='apply-saved':return
+    else:raise SystemExit('Usage: flex-regdomain status|set <CC>|apply-saved')
+if __name__=='__main__':main()

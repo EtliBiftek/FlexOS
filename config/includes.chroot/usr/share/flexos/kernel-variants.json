@@ -1,0 +1,12 @@
+{
+  "default": {"name":"CachyOS Default","purpose":"General desktop/gaming default"},
+  "bore": {"name":"BORE","purpose":"Interactive desktop and gaming latency"},
+  "bmq": {"name":"BMQ","purpose":"Alternative Project C scheduler"},
+  "deckify": {"name":"Deckify","purpose":"Steam Deck and handheld-oriented kernel"},
+  "eevdf": {"name":"EEVDF","purpose":"CachyOS patchset with EEVDF scheduler"},
+  "hardened": {"name":"Hardened","purpose":"Security-hardening patches"},
+  "lts": {"name":"LTS","purpose":"Long-term-support kernel line"},
+  "rc": {"name":"RC","purpose":"Release-candidate testing kernel"},
+  "rt-bore": {"name":"RT-BORE","purpose":"Realtime patchset plus BORE"},
+  "server": {"name":"Server","purpose":"Throughput/server-oriented configuration"}
+}

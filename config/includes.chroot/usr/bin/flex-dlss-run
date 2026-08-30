@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+updater=1
+if [[ "${1:-}" == '--no-updater' ]]; then updater=0; shift; fi
+[[ $# -gt 0 ]] || { echo 'Usage: flex-dlss-run [--no-updater] <command> [args...]' >&2; exit 2; }
+[[ "$updater" == 0 ]] || export PROTON_ENABLE_NGX_UPDATER=1
+export DXVK_NVAPI_DRS_NGX_DLSS_RR_OVERRIDE=on
+export DXVK_NVAPI_DRS_NGX_DLSS_SR_OVERRIDE=on
+export DXVK_NVAPI_DRS_NGX_DLSS_FG_OVERRIDE=on
+export DXVK_NVAPI_DRS_NGX_DLSS_RR_OVERRIDE_RENDER_PRESET_SELECTION=render_preset_latest
+export DXVK_NVAPI_DRS_NGX_DLSS_SR_OVERRIDE_RENDER_PRESET_SELECTION=render_preset_latest
+exec "$@"

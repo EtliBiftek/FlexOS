@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo 'root required' >&2; exit 1; }
+command -v setpci >/dev/null || { echo 'setpci is unavailable (install pciutils)' >&2; exit 1; }
+case "${1:-apply}" in
+  apply) setpci -v -s '*:*' latency_timer=20; setpci -v -s '0:0' latency_timer=0 || true; setpci -v -d '*:*:04xx' latency_timer=80;;
+  reset) setpci -v -s '*:*' latency_timer=20; setpci -v -s '0:0' latency_timer=0 || true;;
+  *) echo 'Usage: flex-pci-latency apply|reset' >&2; exit 2;;
+esac

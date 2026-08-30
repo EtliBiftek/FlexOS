@@ -1,0 +1,31 @@
+name: Validate Extended CachyOS Parity
+on:
+  pull_request:
+    paths:
+      - 'scripts/build-cachyos-kernel-variant.sh'
+      - 'scripts/validate-cachyos-parity.sh'
+      - '.github/workflows/build-cachyos-kernel-variants.yml'
+      - '.github/workflows/validate-cachyos-parity.yml'
+      - 'config/includes.chroot/usr/bin/flex-kernel-manager'
+      - 'config/includes.chroot/usr/bin/flex-regdomain'
+      - 'config/includes.chroot/usr/bin/flex-pci-latency'
+      - 'config/includes.chroot/usr/bin/flex-topmem'
+      - 'config/includes.chroot/usr/bin/flex-zink-run'
+      - 'config/includes.chroot/usr/bin/flex-dlss-run'
+      - 'config/includes.chroot/usr/lib/systemd/system/flexos-regdomain.service'
+      - 'config/includes.chroot/usr/lib/systemd/system/flexos-pci-latency.service'
+      - 'config/includes.chroot/usr/share/flexos/kernel-variants.json'
+      - 'packages/package-map.json'
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate extended parity source
+        run: chmod +x scripts/validate-cachyos-parity.sh scripts/build-cachyos-kernel-variant.sh && ./scripts/validate-cachyos-parity.sh
+      - name: Validate component package ownership
+        run: |
+          EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          PKGVER="$(python3 scripts/version-to-deb.py "$(cat VERSION)" --epoch "$EPOCH" --sha "$GITHUB_SHA")"
+          python3 scripts/build-flexos-packages.py --output dist/parity-packages --package-version "$PKGVER" --product-version "$(cat VERSION)"
