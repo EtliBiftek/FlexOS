@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/build-cachyos-kernel-variant.sh'
+      - 'scripts/check-cachyos-variant-metadata.sh'
       - 'scripts/validate-cachyos-parity.sh'
       - '.github/workflows/build-cachyos-kernel-variants.yml'
       - '.github/workflows/validate-cachyos-parity.yml'
@@ -23,7 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate extended parity source
-        run: chmod +x scripts/validate-cachyos-parity.sh scripts/build-cachyos-kernel-variant.sh && ./scripts/validate-cachyos-parity.sh
+        run: chmod +x scripts/validate-cachyos-parity.sh scripts/build-cachyos-kernel-variant.sh scripts/check-cachyos-variant-metadata.sh && ./scripts/validate-cachyos-parity.sh
+      - name: Validate current CachyOS variant metadata
+        run: ./scripts/check-cachyos-variant-metadata.sh
       - name: Validate component package ownership
         run: |
           EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
