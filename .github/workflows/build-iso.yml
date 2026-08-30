@@ -8,6 +8,12 @@ on:
     paths-ignore:
       - '**.md'
       - 'LICENSE'
+      # Kernel-builder changes publish kernel-latest first; that workflow then
+      # dispatches this ISO build. Do not race it by consuming a stale kernel.
+      - 'scripts/build-cachyos-kernel.sh'
+      # Editing this workflow must not accidentally start an ISO with whatever
+      # kernel-latest happens to exist while fixing build orchestration.
+      - '.github/workflows/build-iso.yml'
 
 permissions:
   contents: write
