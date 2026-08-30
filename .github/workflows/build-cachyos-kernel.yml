@@ -24,15 +24,48 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Decide whether the kernel must be rebuilt
+        id: gate
+        shell: bash
+        run: |
+          set -eu
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+            echo 'Non-PR kernel workflow: build required.'
+            exit 0
+          fi
+          if git rev-parse HEAD^ >/dev/null 2>&1 && git diff --quiet HEAD^ HEAD -- scripts/build-cachyos-kernel.sh; then
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            echo 'Latest PR commit did not change the kernel builder; skipping the expensive kernel compile.'
+          else
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+            echo 'Kernel builder changed in the latest PR commit; full kernel validation is required.'
+          fi
+
+      - name: Kernel build skipped
+        if: steps.gate.outputs.build != 'true'
+        run: echo 'Userspace-only commit; the previously validated kernel artifact remains valid.'
+
       - name: Normalize executable permissions
+        if: steps.gate.outputs.build == 'true'
         run: chmod +x scripts/build-cachyos-kernel.sh scripts/validate-cachyos-stack.sh
+
       - name: Validate integration source
+        if: steps.gate.outputs.build == 'true'
         run: ./scripts/validate-cachyos-stack.sh
+
       - name: Reclaim runner disk space
+        if: steps.gate.outputs.build == 'true'
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
           df -h /
+
       - name: Build Debian kernel packages
+        if: steps.gate.outputs.build == 'true'
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace debian:13 bash -lc '
             set -eux
@@ -44,7 +77,9 @@ jobs:
               curl git python3 gnupg dirmngr
             ./scripts/build-cachyos-kernel.sh dist/kernel
           '
+
       - name: Validate kernel package set
+        if: steps.gate.outputs.build == 'true'
         run: |
           set -eux
           test -s dist/kernel/KERNEL_INFO
@@ -54,15 +89,18 @@ jobs:
           compgen -G 'dist/kernel/linux-headers-*.deb' >/dev/null
           (cd dist/kernel && sha256sum -c SHA256SUMS)
           dpkg-deb --info dist/kernel/linux-image-*.deb | head -n 80
+
       - name: Keep kernel packages as CI artifact
+        if: steps.gate.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: FlexOS-CachyOS-kernel-${{ github.sha }}
+          name: FlexOS-CachyOS-kernel-${{ github.event.pull_request.head.sha || github.sha }}
           path: dist/kernel/
           if-no-files-found: error
           retention-days: 14
+
       - name: Publish rolling kernel release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: steps.gate.outputs.build == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -78,8 +116,9 @@ jobs:
             gh release create kernel-latest --title "FlexOS CachyOS Kernel" --prerelease --notes-file dist/kernel/KERNEL_INFO
           fi
           gh release upload kernel-latest dist/kernel/* --clobber
+
       - name: Rebuild FlexOS ISO with the published kernel
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: steps.gate.outputs.build == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run build-iso.yml --ref main
