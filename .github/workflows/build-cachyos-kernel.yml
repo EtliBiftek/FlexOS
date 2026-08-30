@@ -32,23 +32,35 @@ jobs:
         id: gate
         shell: bash
         run: |
-          set -eu
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo 'build=true' >> "$GITHUB_OUTPUT"
-            echo 'Non-PR kernel workflow: build required.'
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if git rev-parse HEAD^ >/dev/null 2>&1 && git diff --quiet HEAD^ HEAD -- scripts/build-cachyos-kernel.sh; then
+              echo 'build=false' >> "$GITHUB_OUTPUT"
+              echo 'Latest PR commit did not change the kernel builder; skipping the expensive kernel compile.'
+            else
+              echo 'build=true' >> "$GITHUB_OUTPUT"
+              echo 'Kernel builder changed in the latest PR commit; full kernel validation is required.'
+            fi
             exit 0
           fi
-          if git rev-parse HEAD^ >/dev/null 2>&1 && git diff --quiet HEAD^ HEAD -- scripts/build-cachyos-kernel.sh; then
-            echo 'build=false' >> "$GITHUB_OUTPUT"
-            echo 'Latest PR commit did not change the kernel builder; skipping the expensive kernel compile.'
-          else
-            echo 'build=true' >> "$GITHUB_OUTPUT"
-            echo 'Kernel builder changed in the latest PR commit; full kernel validation is required.'
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            promoted="$(cat .github/flexos-kernel-promoted-builder.gitsha 2>/dev/null || true)"
+            current="$(git hash-object scripts/build-cachyos-kernel.sh)"
+            if [[ -n "$promoted" && "$promoted" == "$current" ]]; then
+              echo 'build=false' >> "$GITHUB_OUTPUT"
+              echo 'This exact kernel builder was already validated and promoted to kernel-latest; skipping duplicate compile.'
+            else
+              echo 'build=true' >> "$GITHUB_OUTPUT"
+              echo 'Kernel builder differs from the promoted artifact; full build required.'
+            fi
+            exit 0
           fi
+          echo 'build=true' >> "$GITHUB_OUTPUT"
+          echo 'Manual/upstream-triggered kernel workflow: full build required.'
 
       - name: Kernel build skipped
         if: steps.gate.outputs.build != 'true'
-        run: echo 'Userspace-only commit; the previously validated kernel artifact remains valid.'
+        run: echo 'A previously validated kernel artifact remains valid for this builder.'
 
       - name: Normalize executable permissions
         if: steps.gate.outputs.build == 'true'
