@@ -99,9 +99,25 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           set -eux
-          git config user.name github-actions[bot];git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git tag -f kernel-latest "$GITHUB_SHA";git push --force origin refs/tags/kernel-latest
-          if gh release view kernel-latest >/dev/null 2>&1; then while IFS= read -r asset; do [[ -n "$asset" ]] && gh release delete-asset kernel-latest "$asset" -y;done < <(gh release view kernel-latest --json assets --jq '.assets[].name');gh release edit kernel-latest --title 'FlexOS CachyOS Kernel' --prerelease --notes-file dist/kernel/KERNEL_INFO;else gh release create kernel-latest --title 'FlexOS CachyOS Kernel' --prerelease --notes-file dist/kernel/KERNEL_INFO;fi
+          if gh release view kernel-latest >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              [[ -n "$asset" ]] && gh release delete-asset kernel-latest "$asset" -y
+            done < <(gh release view kernel-latest --json assets --jq '.assets[].name')
+            gh release edit kernel-latest \
+              --title 'FlexOS CachyOS Kernel' \
+              --prerelease \
+              --notes-file dist/kernel/KERNEL_INFO
+          else
+            # Do not create or move refs from GITHUB_TOKEN: commits that touch
+            # .github/workflows require the GitHub App 'workflows' permission.
+            # kernel-latest is a stable rolling tag; recreate only if it already exists.
+            git ls-remote --exit-code --tags origin refs/tags/kernel-latest >/dev/null
+            gh release create kernel-latest \
+              --verify-tag \
+              --title 'FlexOS CachyOS Kernel' \
+              --prerelease \
+              --notes-file dist/kernel/KERNEL_INFO
+          fi
           gh release upload kernel-latest dist/kernel/* --clobber
       - name: Rebuild FlexOS ISO with the published kernel
         if: steps.gate.outputs.build == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
