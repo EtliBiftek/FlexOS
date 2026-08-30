@@ -20,7 +20,23 @@ ufw default allow outgoing >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
 command -v sysctl >/dev/null 2>&1 && sysctl --system >/dev/null 2>&1 || true
 command -v plymouth-set-default-theme >/dev/null 2>&1 && plymouth-set-default-theme flexos || true
-command -v update-initramfs >/dev/null 2>&1 && update-initramfs -u -k all || true
+
+# The CachyOS-derived kernel keeps common optical/storage drivers as modules.
+# live-boot must have them in the initramfs or the ISO medium is invisible
+# before the live root filesystem can be mounted.
+mkdir -p /etc/initramfs-tools/conf.d /etc/live
+printf '%s\n' 'MODULES=most' > /etc/initramfs-tools/conf.d/flexos-live-media
+printf '%s\n' 'DISABLE_CDROM=false' > /etc/live/boot.conf
+touch /etc/initramfs-tools/modules
+for module in ata_piix sr_mod isofs; do
+    grep -qxF "$module" /etc/initramfs-tools/modules || printf '%s\n' "$module" >> /etc/initramfs-tools/modules
+done
+
+# Treat a broken live initramfs as a build failure instead of shipping an ISO
+# that can load its kernel but cannot discover its own live filesystem.
+if command -v update-initramfs >/dev/null 2>&1; then
+    update-initramfs -u -k all
+fi
 command -v update-grub >/dev/null 2>&1 && update-grub || true
 apt-get clean || true
 rm -f /var/cache/apt/archives/*.deb 2>/dev/null || true
