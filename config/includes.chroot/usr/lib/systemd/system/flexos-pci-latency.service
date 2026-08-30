@@ -1,0 +1,12 @@
+[Unit]
+Description=FlexOS optional PCI audio latency tuning
+After=basic.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flex-pci-latency apply
+RemainAfterExit=yes
+ExecStop=/usr/bin/flex-pci-latency reset
+
+[Install]
+WantedBy=multi-user.target

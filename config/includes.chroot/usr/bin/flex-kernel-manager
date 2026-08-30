@@ -1,50 +1,76 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib, json, os, re, subprocess, sys, tempfile, urllib.request
+import hashlib,json,os,re,subprocess,sys,tempfile,urllib.error,urllib.request
 from pathlib import Path
-UA={'User-Agent':'FlexOS-kernel-manager/2'}
-
+UA={'User-Agent':'FlexOS-kernel-manager/3'}
+VARIANTS=('default','bore','bmq','deckify','eevdf','hardened','lts','rc','rt-bore','server')
+CPUS=('generic','v3','v4','zen4','native')
 def root():
     if os.geteuid()!=0:raise SystemExit('This action requires root.')
 def dpkg(pattern):
-    p=subprocess.run(['dpkg-query','-W','-f=${Package}\t${Version}\t${db:Status-Abbrev}\n',pattern],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
-    return [x for x in p.stdout.splitlines() if '\tii' in x]
+    p=subprocess.run(['dpkg-query','-W','-f=${Package}\t${Version}\t${db:Status-Abbrev}\n',pattern],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True);return [x for x in p.stdout.splitlines() if '\tii' in x]
 def runtime_image(name):return name.startswith('linux-image-') and name.endswith('.deb') and '-dbg_' not in name
+def active():return subprocess.check_output(['uname','-r'],text=True).strip()
 def status():
-    print('active:',subprocess.check_output(['uname','-r'],text=True).strip())
-    for x in dpkg('linux-image-*'):print(x)
-    print('fallback-meta:','installed' if dpkg('linux-image-amd64') else 'missing')
+    print('active:',active());[print(x) for x in dpkg('linux-image-*')];print('fallback-meta:','installed' if dpkg('linux-image-amd64') else 'missing')
 def fallback():
     root();subprocess.run(['apt-get','update'],check=True);subprocess.run(['apt-get','install','-y','linux-image-amd64','linux-headers-amd64'],check=True);subprocess.run(['update-grub'],check=False)
-def latest_release():
-    req=urllib.request.Request('https://api.github.com/repos/EtliBiftek/FlexOS/releases/tags/kernel-latest',headers=UA)
+def tag_for(variant,cpu):return 'kernel-latest' if variant=='default' and cpu=='generic' else f'kernel-{variant}-{cpu}-latest'
+def release(tag):
+    req=urllib.request.Request(f'https://api.github.com/repos/EtliBiftek/FlexOS/releases/tags/{tag}',headers=UA)
     with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
-def update_cachy():
-    root();rel=latest_release();assets=rel.get('assets',[])
+def available():
+    for variant in VARIANTS:
+        for cpu in ('generic','v3','v4','zen4'):
+            tag=tag_for(variant,cpu)
+            try:
+                r=release(tag)
+                if any(runtime_image(a.get('name','')) for a in r.get('assets',[])):print(f'{variant:10} {cpu:7} {tag}')
+            except urllib.error.HTTPError as e:
+                if e.code!=404:print(f'{variant:10} {cpu:7} error={e.code}')
+            except Exception as e:print(f'{variant:10} {cpu:7} error={e}')
+def verify_manifest(files,text):
+    expected={}
+    for line in text.splitlines():
+        m=re.fullmatch(r'([0-9a-fA-F]{64})\s+\*?(.+)',line.strip())
+        if m:expected[m.group(2)]=m.group(1).lower()
+    for name,path in files.items():
+        if name in expected and hashlib.sha256(path.read_bytes()).hexdigest()!=expected[name]:raise SystemExit(f'Kernel manifest checksum mismatch: {name}')
+def install_variant(variant='default',cpu='generic'):
+    root()
+    if variant not in VARIANTS:raise SystemExit('Unknown variant: '+variant)
+    if cpu not in CPUS:raise SystemExit('Unknown CPU target: '+cpu)
+    tag=tag_for(variant,cpu);rel=release(tag);assets=rel.get('assets',[])
     wanted=[a for a in assets if runtime_image(a.get('name','')) or (a.get('name','').startswith('linux-headers-') and a.get('name','').endswith('.deb'))]
-    if not any(runtime_image(a.get('name','')) for a in wanted):raise SystemExit('kernel-latest release has no runtime kernel image.')
+    manifest=next((a for a in assets if a.get('name')=='SHA256SUMS'),None)
+    if not any(runtime_image(a.get('name','')) for a in wanted):raise SystemExit(f'{tag} has no runtime kernel image.')
     with tempfile.TemporaryDirectory(prefix='flex-kernel-') as td:
-        files=[]
-        for a in wanted:
+        files={};ordered=[]
+        for a in wanted+([manifest] if manifest else []):
+            if not a:continue
             f=Path(td)/a['name'];req=urllib.request.Request(a['browser_download_url'],headers=UA);h=hashlib.sha256()
-            with urllib.request.urlopen(req,timeout=180) as r,open(f,'wb') as o:
+            with urllib.request.urlopen(req,timeout=300) as r,open(f,'wb') as o:
                 for b in iter(lambda:r.read(1024*1024),b''):h.update(b);o.write(b)
             dig=a.get('digest','')
-            if dig.startswith('sha256:') and h.hexdigest()!=dig.split(':',1)[1]:raise SystemExit(f'Kernel asset checksum mismatch: {a["name"]}')
-            files.append(str(f))
-        subprocess.run(['apt-get','install','-y',*files],check=True)
-    subprocess.run(['update-grub'],check=False);print('Latest verified FlexOS CachyOS runtime kernel and headers installed; debug packages were not downloaded.')
+            if dig.startswith('sha256:') and h.hexdigest()!=dig.split(':',1)[1]:raise SystemExit(f'GitHub asset checksum mismatch: {a["name"]}')
+            files[a['name']]=f
+            if a in wanted:ordered.append(str(f))
+        if manifest:verify_manifest({k:v for k,v in files.items() if k!='SHA256SUMS'},files['SHA256SUMS'].read_text(errors='replace'))
+        subprocess.run(['apt-get','install','-y',*ordered],check=True)
+    subprocess.run(['update-grub'],check=False);print(f'Installed verified FlexOS CachyOS kernel: variant={variant}, cpu={cpu}, tag={tag}')
 def remove(pkg):
-    root();active=subprocess.check_output(['uname','-r'],text=True).strip()
+    root();running=active()
     if pkg in ('linux-image-amd64','linux-headers-amd64'):raise SystemExit('Debian fallback meta-package is protected.')
-    if active in pkg:raise SystemExit('Refusing to remove the running kernel.')
+    if running in pkg:raise SystemExit('Refusing to remove the running kernel.')
     if not re.fullmatch(r'linux-(?:image|headers)-[A-Za-z0-9.+:~_-]+',pkg):raise SystemExit('Invalid kernel package name.')
     subprocess.run(['apt-get','remove','-y',pkg],check=True);subprocess.run(['update-grub'],check=False)
 def main():
     a=sys.argv[1:] or ['status']
     if a[0] in ('status','list'):status()
+    elif a[0]=='available':available()
     elif a[0]=='install-fallback':fallback()
-    elif a[0]=='update-cachy':update_cachy()
+    elif a[0]=='update-cachy':install_variant('default','generic')
+    elif a[0]=='install' and len(a) in (2,3):install_variant(a[1],a[2] if len(a)==3 else 'generic')
     elif a[0]=='remove' and len(a)==2:remove(a[1])
-    else:raise SystemExit('Usage: flex-kernel-manager status|install-fallback|update-cachy|remove <package>')
+    else:raise SystemExit('Usage: flex-kernel-manager status|available|install-fallback|update-cachy|install <variant> [generic|v3|v4|zen4|native]|remove <package>')
 if __name__=='__main__':main()
