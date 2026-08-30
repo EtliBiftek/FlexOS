@@ -90,6 +90,8 @@ for pkg in \
   flexos-center \
   flexos-welcome \
   flexos-tools \
+  flexos-performance \
+  flexos-gaming \
   flexos-calamares \
   flexos-plymouth
 do
@@ -98,6 +100,21 @@ do
     exit 1
   }
 done
+
+if ! grep -Eq '^Package: linux-image-[^[:space:]]*flexos-cachy' "$tmp/dpkg-status"; then
+  echo "ERROR: live filesystem does not contain a FlexOS CachyOS-derived runtime kernel package." >&2
+  exit 1
+fi
+
+if ! grep -Eq '^Package: linux-headers-[^[:space:]]*flexos-cachy' "$tmp/dpkg-status"; then
+  echo "ERROR: live filesystem does not contain matching FlexOS CachyOS kernel headers." >&2
+  exit 1
+fi
+
+grep -q '^Package: linux-image-amd64$' "$tmp/dpkg-status" || {
+  echo "ERROR: Debian fallback kernel meta-package is missing from the live filesystem." >&2
+  exit 1
+}
 
 # KDE-only invariant.
 cat_sq /usr/share/flexos/desktop-profiles.json >"$tmp/desktops.json"
@@ -132,6 +149,11 @@ for path in \
   /usr/bin/flex-welcome \
   /usr/bin/flex-self-update \
   /usr/bin/flex-beta-check \
+  /usr/bin/flex-scx \
+  /usr/bin/flex-gaming \
+  /usr/bin/flex-hwd \
+  /usr/bin/flex-kernel-manager \
+  /usr/bin/flex-secureboot \
   /usr/lib/flexos/flex-recovery-console \
   /usr/lib/systemd/system/flexos-recovery.target \
   /etc/grub.d/41_flexos_recovery
@@ -148,4 +170,4 @@ done
 
 sha256sum "$ISO"
 
-echo "FlexOS ISO structural + live-filesystem smoke test passed."
+echo "FlexOS ISO structural + CachyOS-kernel live-filesystem smoke test passed."

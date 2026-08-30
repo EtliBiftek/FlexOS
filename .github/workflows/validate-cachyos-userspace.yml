@@ -8,6 +8,8 @@ on:
       - 'config/hooks/live/**'
       - 'packages/**'
       - 'scripts/validate-cachyos-stack.sh'
+      - 'scripts/smoke-test-iso.sh'
+      - 'scripts/qemu-boot-smoke.sh'
       - '.github/workflows/validate-cachyos-userspace.yml'
 
 permissions:
@@ -25,6 +27,12 @@ jobs:
         run: |
           ./scripts/validate.sh
           ./scripts/validate-cachyos-stack.sh
+          bash -n scripts/smoke-test-iso.sh
+          bash -n scripts/qemu-boot-smoke.sh
+          grep -q 'flexos-cachy' scripts/qemu-boot-smoke.sh
+          grep -q 'linux-image-amd64' scripts/smoke-test-iso.sh
+          grep -q 'flexos-performance' scripts/smoke-test-iso.sh
+          grep -q 'flexos-gaming' scripts/smoke-test-iso.sh
       - name: Build every FlexOS component package
         run: |
           PKGVER="0.5.0~ci$(date +%s)"
