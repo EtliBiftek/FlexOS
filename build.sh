@@ -25,6 +25,17 @@ elif [[ -n "${GITHUB_RUN_NUMBER:-}" ]]; then version_args+=( --ci-run "$GITHUB_R
 [[ -n "${GITHUB_SHA:-}" ]] && version_args+=( --sha "$GITHUB_SHA" )
 PACKAGE_VERSION="$(python3 scripts/version-to-deb.py "${version_args[@]}")"
 COMPONENT_BASE_URL="https://github.com/${GITHUB_REPOSITORY:-EtliBiftek/FlexOS}/releases/download/packages-latest"
+REQUIRE_CACHY_KERNEL="${FLEXOS_REQUIRE_CACHY_KERNEL:-1}"
+FETCH_CACHY_KERNEL="${FLEXOS_FETCH_CACHY_KERNEL:-1}"
+
+[[ "$REQUIRE_CACHY_KERNEL" == "0" || "$REQUIRE_CACHY_KERNEL" == "1" ]] || {
+  echo "ERROR: FLEXOS_REQUIRE_CACHY_KERNEL must be 0 or 1." >&2
+  exit 1
+}
+[[ "$FETCH_CACHY_KERNEL" == "0" || "$FETCH_CACHY_KERNEL" == "1" ]] || {
+  echo "ERROR: FLEXOS_FETCH_CACHY_KERNEL must be 0 or 1." >&2
+  exit 1
+}
 
 rm -rf config/packages.chroot
 mkdir -p config/packages.chroot
@@ -35,17 +46,31 @@ has_runtime_cachy_kernel() {
   [[ -d dist/kernel ]] && find dist/kernel -maxdepth 1 -type f -name 'linux-image-*.deb' ! -name '*-dbg_*' -print -quit 2>/dev/null | grep -q .
 }
 
-if ! has_runtime_cachy_kernel && [[ "${FLEXOS_FETCH_CACHY_KERNEL:-1}" != "0" ]]; then
-  python3 scripts/fetch-cachyos-kernel.py dist/kernel || true
+if ! has_runtime_cachy_kernel && [[ "$FETCH_CACHY_KERNEL" == "1" ]]; then
+  if ! python3 scripts/fetch-cachyos-kernel.py dist/kernel; then
+    if [[ "$REQUIRE_CACHY_KERNEL" == "1" ]]; then
+      echo "ERROR: failed to fetch the required CachyOS-derived FlexOS kernel release." >&2
+      exit 1
+    fi
+    echo "WARNING: failed to fetch optional CachyOS-derived kernel release." >&2
+  fi
 fi
 
-if [[ -f dist/kernel/SHA256SUMS ]]; then (cd dist/kernel && sha256sum -c SHA256SUMS);fi
+if [[ -f dist/kernel/SHA256SUMS ]]; then
+  (cd dist/kernel && sha256sum -c SHA256SUMS)
+fi
 
 CACHY_KERNEL=0
 CACHY_FLAVOUR=""
 mapfile -t CACHY_IMAGES < <(find dist/kernel -maxdepth 1 -type f -name 'linux-image-*.deb' ! -name '*-dbg_*' -print 2>/dev/null | sort || true)
 mapfile -t CACHY_HEADERS < <(find dist/kernel -maxdepth 1 -type f -name 'linux-headers-*.deb' -print 2>/dev/null | sort || true)
 if (( ${#CACHY_IMAGES[@]} > 0 )); then
+  if (( ${#CACHY_IMAGES[@]} != 1 )); then
+    printf 'ERROR: expected exactly one CachyOS-derived runtime kernel package, found %d.\n' "${#CACHY_IMAGES[@]}" >&2
+    printf '  %s\n' "${CACHY_IMAGES[@]}" >&2
+    exit 1
+  fi
+
   CACHY_IMAGE_PACKAGE="$(dpkg-deb -f "${CACHY_IMAGES[0]}" Package)"
   if [[ "$CACHY_IMAGE_PACKAGE" != linux-image-*flexos-cachy ]]; then
     echo "ERROR: unexpected CachyOS-derived kernel package name: $CACHY_IMAGE_PACKAGE" >&2
@@ -54,13 +79,27 @@ if (( ${#CACHY_IMAGES[@]} > 0 )); then
   CACHY_FLAVOUR="${CACHY_IMAGE_PACKAGE#linux-image-}"
   [[ -n "$CACHY_FLAVOUR" ]] || { echo "ERROR: unable to derive live-build kernel flavour." >&2; exit 1; }
 
+  EXPECTED_HEADER_PACKAGE="linux-headers-${CACHY_FLAVOUR}"
+  HEADER_MATCH=0
+  for header in "${CACHY_HEADERS[@]}"; do
+    if [[ "$(dpkg-deb -f "$header" Package)" == "$EXPECTED_HEADER_PACKAGE" ]]; then
+      HEADER_MATCH=1
+      break
+    fi
+  done
+  if [[ "$HEADER_MATCH" != "1" ]]; then
+    echo "ERROR: matching kernel headers are missing: $EXPECTED_HEADER_PACKAGE" >&2
+    exit 1
+  fi
+
   cp -f "${CACHY_IMAGES[@]}" config/packages.chroot/
-  if (( ${#CACHY_HEADERS[@]} > 0 )); then cp -f "${CACHY_HEADERS[@]}" config/packages.chroot/;fi
+  cp -f "${CACHY_HEADERS[@]}" config/packages.chroot/
   CACHY_KERNEL=1
-  echo "CachyOS-derived FlexOS runtime kernel packages embedded in ISO (debug packages excluded)."
+  echo "CachyOS-derived FlexOS runtime kernel and matching headers embedded in ISO."
   echo "live-build CachyOS kernel flavour: $CACHY_FLAVOUR"
-elif [[ "${FLEXOS_REQUIRE_CACHY_KERNEL:-0}" == "1" ]]; then
-  echo "ERROR: FLEXOS_REQUIRE_CACHY_KERNEL=1 but dist/kernel has no runtime kernel package." >&2;exit 1
+elif [[ "$REQUIRE_CACHY_KERNEL" == "1" ]]; then
+  echo "ERROR: required CachyOS-derived runtime kernel package is unavailable in dist/kernel." >&2
+  exit 1
 else
   echo "WARNING: no CachyOS-derived kernel artifact found; using Debian kernel only." >&2
 fi
@@ -71,10 +110,9 @@ rm -f FlexOS-*.iso FlexOS-*.iso.sha256 build.log
 
 linux_args=(--linux-flavours amd64)
 if [[ "$CACHY_KERNEL" == "1" ]]; then
-  # Do not use --linux-packages none here. That disables live-build's kernel
-  # handling entirely, leaving binary/live without vmlinuz/initrd and causing
-  # the syslinux stage to fail. The custom uname flavour maps directly to the
-  # embedded linux-image-<flavour> .deb; amd64 remains the Debian fallback.
+  # Keep live-build's kernel installation stage enabled. Otherwise the binary
+  # image has no vmlinuz/initrd for syslinux. The custom uname flavour maps to
+  # the embedded linux-image-<flavour> package; amd64 remains Debian fallback.
   linux_args=(--linux-flavours "$CACHY_FLAVOUR amd64" --linux-packages linux-image)
 fi
 
