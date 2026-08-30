@@ -61,7 +61,8 @@ if [[ -f dist/kernel/SHA256SUMS ]]; then
 fi
 
 CACHY_KERNEL=0
-CACHY_FLAVOUR=""
+CACHY_UNAME_FLAVOUR=""
+CACHY_LIVE_FLAVOUR="flexos-cachy"
 mapfile -t CACHY_IMAGES < <(find dist/kernel -maxdepth 1 -type f -name 'linux-image-*.deb' ! -name '*-dbg_*' -print 2>/dev/null | sort || true)
 mapfile -t CACHY_HEADERS < <(find dist/kernel -maxdepth 1 -type f -name 'linux-headers-*.deb' -print 2>/dev/null | sort || true)
 if (( ${#CACHY_IMAGES[@]} > 0 )); then
@@ -72,14 +73,25 @@ if (( ${#CACHY_IMAGES[@]} > 0 )); then
   fi
 
   CACHY_IMAGE_PACKAGE="$(dpkg-deb -f "${CACHY_IMAGES[0]}" Package)"
+  CACHY_IMAGE_VERSION="$(dpkg-deb -f "${CACHY_IMAGES[0]}" Version)"
+  CACHY_IMAGE_ARCH="$(dpkg-deb -f "${CACHY_IMAGES[0]}" Architecture)"
   if [[ "$CACHY_IMAGE_PACKAGE" != linux-image-*flexos-cachy ]]; then
     echo "ERROR: unexpected CachyOS-derived kernel package name: $CACHY_IMAGE_PACKAGE" >&2
     exit 1
   fi
-  CACHY_FLAVOUR="${CACHY_IMAGE_PACKAGE#linux-image-}"
-  [[ -n "$CACHY_FLAVOUR" ]] || { echo "ERROR: unable to derive live-build kernel flavour." >&2; exit 1; }
+  if [[ "$CACHY_IMAGE_ARCH" != "amd64" ]]; then
+    echo "ERROR: unexpected CachyOS-derived kernel architecture: $CACHY_IMAGE_ARCH" >&2
+    exit 1
+  fi
 
-  EXPECTED_HEADER_PACKAGE="linux-headers-${CACHY_FLAVOUR}"
+  CACHY_UNAME_FLAVOUR="${CACHY_IMAGE_PACKAGE#linux-image-}"
+  [[ -n "$CACHY_UNAME_FLAVOUR" ]] || { echo "ERROR: unable to derive CachyOS kernel uname flavour." >&2; exit 1; }
+  [[ "$CACHY_UNAME_FLAVOUR" == *-"$CACHY_LIVE_FLAVOUR" ]] || {
+    echo "ERROR: kernel '$CACHY_UNAME_FLAVOUR' does not end in live-build flavour '$CACHY_LIVE_FLAVOUR'." >&2
+    exit 1
+  }
+
+  EXPECTED_HEADER_PACKAGE="linux-headers-${CACHY_UNAME_FLAVOUR}"
   HEADER_MATCH=0
   for header in "${CACHY_HEADERS[@]}"; do
     if [[ "$(dpkg-deb -f "$header" Package)" == "$EXPECTED_HEADER_PACKAGE" ]]; then
@@ -94,9 +106,35 @@ if (( ${#CACHY_IMAGES[@]} > 0 )); then
 
   cp -f "${CACHY_IMAGES[@]}" config/packages.chroot/
   cp -f "${CACHY_HEADERS[@]}" config/packages.chroot/
+
+  # live-build expects --linux-flavours to be an ABI-independent flavour
+  # suffix (for example "amd64"), and constructs linux-image-<flavour>.
+  # Our real package is versioned (linux-image-7.x.y-flexos-cachy), so expose
+  # an ABI-independent local metapackage named linux-image-flexos-cachy. This
+  # also makes binary_linux-image look for vmlinuz-*-flexos-cachy, which
+  # matches the kernel file actually installed in /boot.
+  META_ROOT="$(mktemp -d)"
+  mkdir -p "$META_ROOT/DEBIAN"
+  cat > "$META_ROOT/DEBIAN/control" <<META_EOF
+Package: linux-image-${CACHY_LIVE_FLAVOUR}
+Version: ${CACHY_IMAGE_VERSION}
+Section: kernel
+Priority: optional
+Architecture: ${CACHY_IMAGE_ARCH}
+Depends: ${CACHY_IMAGE_PACKAGE} (= ${CACHY_IMAGE_VERSION})
+Maintainer: FlexOS Build System <noreply@flexos.invalid>
+Description: FlexOS CachyOS-derived kernel metapackage
+ ABI-independent live-build metapackage for the versioned FlexOS kernel.
+META_EOF
+  META_FILE_VERSION="${CACHY_IMAGE_VERSION//:/_}"
+  dpkg-deb --build --root-owner-group "$META_ROOT" \
+    "config/packages.chroot/linux-image-${CACHY_LIVE_FLAVOUR}_${META_FILE_VERSION}_${CACHY_IMAGE_ARCH}.deb" >/dev/null
+  rm -rf "$META_ROOT"
+
   CACHY_KERNEL=1
   echo "CachyOS-derived FlexOS runtime kernel and matching headers embedded in ISO."
-  echo "live-build CachyOS kernel flavour: $CACHY_FLAVOUR"
+  echo "CachyOS uname flavour: $CACHY_UNAME_FLAVOUR"
+  echo "live-build kernel flavour: $CACHY_LIVE_FLAVOUR (via linux-image-$CACHY_LIVE_FLAVOUR metapackage)"
 elif [[ "$REQUIRE_CACHY_KERNEL" == "1" ]]; then
   echo "ERROR: required CachyOS-derived runtime kernel package is unavailable in dist/kernel." >&2
   exit 1
@@ -110,10 +148,10 @@ rm -f FlexOS-*.iso FlexOS-*.iso.sha256 build.log
 
 linux_args=(--linux-flavours amd64)
 if [[ "$CACHY_KERNEL" == "1" ]]; then
-  # Keep live-build's kernel installation stage enabled. Otherwise the binary
-  # image has no vmlinuz/initrd for syslinux. The custom uname flavour maps to
-  # the embedded linux-image-<flavour> package; amd64 remains Debian fallback.
-  linux_args=(--linux-flavours "$CACHY_FLAVOUR amd64" --linux-packages linux-image)
+  # Use one ABI-independent custom flavour. The local metapackage resolves to
+  # the exact versioned kernel package while keeping live-build's binary-stage
+  # filename matching compatible with /boot/vmlinuz-<version>-flexos-cachy.
+  linux_args=(--linux-flavours "$CACHY_LIVE_FLAVOUR" --linux-packages linux-image)
 fi
 
 lb config noauto \
