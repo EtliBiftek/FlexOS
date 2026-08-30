@@ -5,10 +5,12 @@ on:
   pull_request:
     paths:
       - 'scripts/build-cachyos-kernel.sh'
+      - '.github/workflows/build-cachyos-kernel.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/build-cachyos-kernel.sh'
+      - '.github/workflows/build-cachyos-kernel.yml'
 
 permissions:
   contents: write
