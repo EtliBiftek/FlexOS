@@ -42,13 +42,23 @@ fi
 if [[ -f dist/kernel/SHA256SUMS ]]; then (cd dist/kernel && sha256sum -c SHA256SUMS);fi
 
 CACHY_KERNEL=0
+CACHY_FLAVOUR=""
 mapfile -t CACHY_IMAGES < <(find dist/kernel -maxdepth 1 -type f -name 'linux-image-*.deb' ! -name '*-dbg_*' -print 2>/dev/null | sort || true)
 mapfile -t CACHY_HEADERS < <(find dist/kernel -maxdepth 1 -type f -name 'linux-headers-*.deb' -print 2>/dev/null | sort || true)
 if (( ${#CACHY_IMAGES[@]} > 0 )); then
+  CACHY_IMAGE_PACKAGE="$(dpkg-deb -f "${CACHY_IMAGES[0]}" Package)"
+  if [[ "$CACHY_IMAGE_PACKAGE" != linux-image-*flexos-cachy ]]; then
+    echo "ERROR: unexpected CachyOS-derived kernel package name: $CACHY_IMAGE_PACKAGE" >&2
+    exit 1
+  fi
+  CACHY_FLAVOUR="${CACHY_IMAGE_PACKAGE#linux-image-}"
+  [[ -n "$CACHY_FLAVOUR" ]] || { echo "ERROR: unable to derive live-build kernel flavour." >&2; exit 1; }
+
   cp -f "${CACHY_IMAGES[@]}" config/packages.chroot/
   if (( ${#CACHY_HEADERS[@]} > 0 )); then cp -f "${CACHY_HEADERS[@]}" config/packages.chroot/;fi
   CACHY_KERNEL=1
   echo "CachyOS-derived FlexOS runtime kernel packages embedded in ISO (debug packages excluded)."
+  echo "live-build CachyOS kernel flavour: $CACHY_FLAVOUR"
 elif [[ "${FLEXOS_REQUIRE_CACHY_KERNEL:-0}" == "1" ]]; then
   echo "ERROR: FLEXOS_REQUIRE_CACHY_KERNEL=1 but dist/kernel has no runtime kernel package." >&2;exit 1
 else
@@ -60,7 +70,13 @@ rm -rf config/binary config/bootstrap config/bootloaders config/chroot config/co
 rm -f FlexOS-*.iso FlexOS-*.iso.sha256 build.log
 
 linux_args=(--linux-flavours amd64)
-if [[ "$CACHY_KERNEL" == "1" ]]; then linux_args=(--linux-flavours flexos-cachy --linux-packages none);fi
+if [[ "$CACHY_KERNEL" == "1" ]]; then
+  # Do not use --linux-packages none here. That disables live-build's kernel
+  # handling entirely, leaving binary/live without vmlinuz/initrd and causing
+  # the syslinux stage to fail. The custom uname flavour maps directly to the
+  # embedded linux-image-<flavour> .deb; amd64 remains the Debian fallback.
+  linux_args=(--linux-flavours "$CACHY_FLAVOUR amd64" --linux-packages linux-image)
+fi
 
 lb config noauto \
   --mode debian \
