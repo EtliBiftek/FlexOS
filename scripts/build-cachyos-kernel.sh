@@ -86,6 +86,16 @@ if [[ -x scripts/config ]]; then
   scripts/config -e SCHED_BORE || true
   scripts/config --set-str LOCALVERSION "-flexos-cachy"
   scripts/config -d LOCALVERSION_AUTO
+
+  # Debian live-boot must be able to discover the ISO before it can load
+  # additional modules from the live filesystem. CachyOS keeps several pieces
+  # of the optical/live-media path modular, which can leave a custom live initrd
+  # unable to see QEMU's PIIX CD-ROM. Keep the minimal live boot path built in.
+  scripts/config -e ATA_PIIX
+  scripts/config -e BLK_DEV_SR
+  scripts/config -e ISO9660_FS
+  scripts/config -e SQUASHFS
+  scripts/config -e OVERLAY_FS
 fi
 
 # Rust support in a very new kernel can require a newer toolchain than Debian 13
@@ -103,6 +113,23 @@ if command -v clang >/dev/null 2>&1 && command -v ld.lld >/dev/null 2>&1; then
 fi
 
 make "${build_flags[@]}" olddefconfig
+
+# Do not publish a kernel that can reproduce the live-boot medium discovery
+# failure. These must be built into vmlinuz, not merely available as modules.
+required_live_boot_builtin=(
+  CONFIG_ATA_PIIX
+  CONFIG_BLK_DEV_SR
+  CONFIG_ISO9660_FS
+  CONFIG_SQUASHFS
+  CONFIG_OVERLAY_FS
+)
+for symbol in "${required_live_boot_builtin[@]}"; do
+  if ! grep -qx "${symbol}=y" .config; then
+    echo "ERROR: ${symbol} must be built in for reliable FlexOS live-media boot." >&2
+    grep -E "^${symbol}=|^# ${symbol} is not set$" .config >&2 || true
+    exit 1
+  fi
+done
 
 # Keep the result explicitly branded as FlexOS while preserving CachyOS source
 # provenance in the metadata file shipped next to the packages.
@@ -132,6 +159,7 @@ source_signature=${signature_status}
 flexos_localversion=-flexos-cachy
 architecture=amd64
 cpu_tuning=generic
+live_boot_core=builtin
 build_compiler=$(if (( ${#build_flags[@]} )); then echo llvm; else echo gcc; fi)
 build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
