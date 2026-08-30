@@ -27,69 +27,50 @@ jobs:
         with:
           fetch-depth: 2
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
       - name: Decide whether the kernel must be rebuilt
         id: gate
         shell: bash
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            if git rev-parse HEAD^ >/dev/null 2>&1 && git diff --quiet HEAD^ HEAD -- scripts/build-cachyos-kernel.sh; then
-              echo 'build=false' >> "$GITHUB_OUTPUT"
-              echo 'Latest PR commit did not change the kernel builder; skipping the expensive kernel compile.'
-            else
-              echo 'build=true' >> "$GITHUB_OUTPUT"
-              echo 'Kernel builder changed in the latest PR commit; full kernel validation is required.'
-            fi
+            if git rev-parse HEAD^ >/dev/null 2>&1 && git diff --quiet HEAD^ HEAD -- scripts/build-cachyos-kernel.sh; then echo 'build=false' >> "$GITHUB_OUTPUT";echo 'Userspace-only PR commit; skipping kernel compile.';else echo 'build=true' >> "$GITHUB_OUTPUT";fi
             exit 0
           fi
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            promoted="$(cat .github/flexos-kernel-promoted-builder.gitsha 2>/dev/null || true)"
-            current="$(git hash-object scripts/build-cachyos-kernel.sh)"
-            if [[ -n "$promoted" && "$promoted" == "$current" ]]; then
-              echo 'build=false' >> "$GITHUB_OUTPUT"
-              echo 'This exact kernel builder was already validated and promoted to kernel-latest; skipping duplicate compile.'
-            else
-              echo 'build=true' >> "$GITHUB_OUTPUT"
-              echo 'Kernel builder differs from the promoted artifact; full build required.'
-            fi
+            promoted="$(cat .github/flexos-kernel-promoted-builder.gitsha 2>/dev/null || true)";current="$(git hash-object scripts/build-cachyos-kernel.sh)"
+            if [[ -n "$promoted" && "$promoted" == "$current" ]]; then echo 'build=false' >> "$GITHUB_OUTPUT";echo 'Exact builder already promoted; skipping duplicate compile.';else echo 'build=true' >> "$GITHUB_OUTPUT";fi
             exit 0
           fi
           echo 'build=true' >> "$GITHUB_OUTPUT"
-          echo 'Manual/upstream-triggered kernel workflow: full build required.'
-
       - name: Kernel build skipped
         if: steps.gate.outputs.build != 'true'
         run: echo 'A previously validated kernel artifact remains valid for this builder.'
-
       - name: Normalize executable permissions
         if: steps.gate.outputs.build == 'true'
         run: chmod +x scripts/build-cachyos-kernel.sh scripts/validate-cachyos-stack.sh
-
       - name: Validate integration source
         if: steps.gate.outputs.build == 'true'
         run: ./scripts/validate-cachyos-stack.sh
-
       - name: Reclaim runner disk space
         if: steps.gate.outputs.build == 'true'
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
-          df -h /
-
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
       - name: Build Debian kernel packages
         if: steps.gate.outputs.build == 'true'
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace debian:13 bash -lc '
             set -eux
             apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-              build-essential bc bison flex libssl-dev libelf-dev libdw-dev dwarves \
-              libncurses-dev rsync cpio kmod fakeroot dpkg-dev debhelper pkg-config \
-              clang llvm lld rustc bindgen libclang-dev zstd xz-utils ca-certificates \
-              curl git python3 gnupg dirmngr
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential bc bison flex libssl-dev libelf-dev libdw-dev dwarves libncurses-dev rsync cpio kmod fakeroot dpkg-dev debhelper pkg-config clang llvm lld rustc bindgen libclang-dev zstd xz-utils ca-certificates curl git python3 gnupg dirmngr
             ./scripts/build-cachyos-kernel.sh dist/kernel
           '
-
+      - name: Remove non-runtime debug package from distributable set
+        if: steps.gate.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          rm -f dist/kernel/linux-image-*-dbg_*.deb
+          compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null
+          compgen -G 'dist/kernel/linux-headers-*.deb' >/dev/null
+          (cd dist/kernel && sha256sum linux-image-*.deb linux-headers-*.deb KERNEL_INFO > SHA256SUMS)
       - name: Validate kernel package set
         if: steps.gate.outputs.build == 'true'
         run: |
@@ -97,12 +78,10 @@ jobs:
           test -s dist/kernel/KERNEL_INFO
           test -s dist/kernel/SHA256SUMS
           grep -q '^source_signature=verified$' dist/kernel/KERNEL_INFO
-          compgen -G 'dist/kernel/linux-image-*.deb' >/dev/null
-          compgen -G 'dist/kernel/linux-headers-*.deb' >/dev/null
+          ! compgen -G 'dist/kernel/linux-image-*-dbg_*.deb' >/dev/null
           (cd dist/kernel && sha256sum -c SHA256SUMS)
           dpkg-deb --info dist/kernel/linux-image-*.deb | head -n 80
-
-      - name: Keep kernel packages as CI artifact
+      - name: Keep runtime kernel packages as CI artifact
         if: steps.gate.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -110,27 +89,16 @@ jobs:
           path: dist/kernel/
           if-no-files-found: error
           retention-days: 14
-
       - name: Publish rolling kernel release
         if: steps.gate.outputs.build == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           set -eux
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git tag -f kernel-latest "$GITHUB_SHA"
-          git push --force origin refs/tags/kernel-latest
-          if gh release view kernel-latest >/dev/null 2>&1; then
-            while IFS= read -r asset; do [[ -n "$asset" ]] && gh release delete-asset kernel-latest "$asset" -y; done < <(gh release view kernel-latest --json assets --jq '.assets[].name')
-            gh release edit kernel-latest --title "FlexOS CachyOS Kernel" --prerelease --notes-file dist/kernel/KERNEL_INFO
-          else
-            gh release create kernel-latest --title "FlexOS CachyOS Kernel" --prerelease --notes-file dist/kernel/KERNEL_INFO
-          fi
+          git config user.name github-actions[bot];git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -f kernel-latest "$GITHUB_SHA";git push --force origin refs/tags/kernel-latest
+          if gh release view kernel-latest >/dev/null 2>&1; then while IFS= read -r asset; do [[ -n "$asset" ]] && gh release delete-asset kernel-latest "$asset" -y;done < <(gh release view kernel-latest --json assets --jq '.assets[].name');gh release edit kernel-latest --title 'FlexOS CachyOS Kernel' --prerelease --notes-file dist/kernel/KERNEL_INFO;else gh release create kernel-latest --title 'FlexOS CachyOS Kernel' --prerelease --notes-file dist/kernel/KERNEL_INFO;fi
           gh release upload kernel-latest dist/kernel/* --clobber
-
       - name: Rebuild FlexOS ISO with the published kernel
         if: steps.gate.outputs.build == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        env: {GH_TOKEN: '${{ github.token }}'}
         run: gh workflow run build-iso.yml --ref main
