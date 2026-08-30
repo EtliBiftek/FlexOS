@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep SCX mode synchronized with the FlexOS power profile
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=15s
+AccuracySec=5s
+Unit=flexos-scx-profile-sync.service
+
+[Install]
+WantedBy=timers.target

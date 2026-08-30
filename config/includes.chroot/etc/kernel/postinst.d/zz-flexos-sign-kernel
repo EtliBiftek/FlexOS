@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+version="${1:-}"
+image="${2:-/boot/vmlinuz-$version}"
+[ -n "$version" ] || exit 0
+case "$version" in *flexos-cachy*) ;; *) exit 0;; esac
+[ -f /var/lib/flexos/secureboot/MOK.key ] || exit 0
+[ -f /var/lib/flexos/secureboot/MOK.pem ] || exit 0
+command -v flex-secureboot >/dev/null 2>&1 || exit 0
+flex-secureboot sign-one "$image" || true

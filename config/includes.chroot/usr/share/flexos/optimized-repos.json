@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "profiles": {
+    "baseline": {"branch": "apt-repo", "description": "Portable Debian-compatible FlexOS packages"},
+    "x86-64-v3": {"branch": "apt-v3", "description": "AVX2/BMI2/FMA optimized FlexOS packages"},
+    "x86-64-v4": {"branch": "apt-v4", "description": "AVX-512 optimized FlexOS packages"},
+    "zen4": {"branch": "apt-zen4", "description": "Zen 4/5 targeted FlexOS packages"}
+  },
+  "base": "https://raw.githubusercontent.com/EtliBiftek/FlexOS/{branch}"
+}

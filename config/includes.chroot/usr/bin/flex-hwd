@@ -1,116 +1,99 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-
-import os
-import re
-import shutil
-import subprocess
-import sys
+import os,re,shutil,subprocess,sys
 from pathlib import Path
 
-APPLY = "--apply-safe" in sys.argv
 
-
-def run(cmd: list[str]) -> str:
+def run(cmd,timeout=60,check=False):
+    try:return subprocess.run(cmd,stdout=None if check else subprocess.PIPE,stderr=None if check else subprocess.DEVNULL,text=True,timeout=timeout,check=check)
+    except Exception:return None
+def out(cmd):
+    p=run(cmd);return p.stdout if p and p.returncode==0 and p.stdout else ''
+def root():
+    if os.geteuid()!=0:raise SystemExit('This action requires root.')
+def pci():
+    dev=[]
+    for line in out(['lspci','-Dn']).splitlines():
+        m=re.match(r'^\S+\s+([0-9a-fA-F]{4}):\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4})',line)
+        if m:dev.append(tuple(x.lower() for x in m.groups()))
+    return dev
+def cpu_vendor():
     try:
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30)
-        return p.stdout if p.returncode == 0 else ""
-    except Exception:
-        return ""
-
-
-def pci_devices() -> list[tuple[str, str, str]]:
-    out = run(["lspci", "-Dn"])
-    devices = []
-    for line in out.splitlines():
-        m = re.match(r"^\S+\s+([0-9a-fA-F]{4}):\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4})", line)
-        if m:
-            devices.append(tuple(x.lower() for x in m.groups()))
-    return devices
-
-
-def cpu_vendor() -> str:
-    try:
-        text = Path("/proc/cpuinfo").read_text(errors="ignore")
-    except OSError:
-        return "unknown"
-    m = re.search(r"^vendor_id\s*:\s*(\S+)", text, re.M)
-    return m.group(1) if m else "unknown"
-
-
-def available(pkg: str) -> bool:
-    p = subprocess.run(["apt-cache", "show", pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return p.returncode == 0
-
-
-def installed(pkg: str) -> bool:
-    p = subprocess.run(["dpkg-query", "-W", "-f=${db:Status-Abbrev}", pkg], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    return p.returncode == 0 and p.stdout.startswith("ii")
-
-
-devs = pci_devices()
-gpus = [(c, v, d) for c, v, d in devs if c.startswith(("0300", "0302", "0380"))]
-net = [(c, v, d) for c, v, d in devs if c.startswith(("0200", "0280"))]
-
-safe: list[str] = []
-notes: list[str] = []
-
-vendor = cpu_vendor()
-if vendor == "AuthenticAMD":
-    safe.append("amd64-microcode")
-elif vendor == "GenuineIntel":
-    safe.append("intel-microcode")
-
-for _cls, ven, _dev in gpus:
-    if ven == "1002":
-        safe += ["firmware-amd-graphics", "mesa-vulkan-drivers"]
-        notes.append("AMD GPU: amdgpu + Mesa/Vulkan firmware profile")
-    elif ven == "8086":
-        safe += ["firmware-intel-graphics", "mesa-vulkan-drivers", "intel-media-va-driver"]
-        notes.append("Intel GPU: i915/xe + Mesa/Vulkan/media firmware profile")
-    elif ven == "10de":
-        notes.append("NVIDIA GPU: keep current driver; choose proprietary/open DKMS explicitly in Flex Driver Manager")
-
-for _cls, ven, _dev in net:
-    if ven == "8086":
-        safe.append("firmware-iwlwifi")
-    elif ven in {"10ec", "17aa"}:
-        safe.append("firmware-realtek")
-    elif ven in {"168c", "17cb"}:
-        safe.append("firmware-atheros")
-    elif ven == "14c3":
-        safe.append("firmware-mediatek")
-
-# Preserve order while removing duplicates and ignore names unavailable in the
-# configured Debian/FlexOS repositories.
-seen: set[str] = set()
-safe = [p for p in safe if not (p in seen or seen.add(p))]
-avail = [p for p in safe if available(p)]
-missing = [p for p in avail if not installed(p)]
-
-print(f"CPU vendor: {vendor}")
-print(f"GPU devices: {len(gpus)}")
-for note in notes:
-    print(f"  - {note}")
-print(f"Network devices: {len(net)}")
-print("Safe hardware packages:")
-for pkg in avail:
-    print(f"  {'installed' if installed(pkg) else 'missing':9} {pkg}")
-
-if not APPLY:
-    if missing:
-        print("\nRun 'sudo flex-hwd --apply-safe' to install only the safe firmware/Mesa/microcode set.")
-    raise SystemExit(0)
-
-if os.geteuid() != 0:
-    raise SystemExit("--apply-safe requires root")
-if not missing:
-    print("All safe hardware packages are already installed.")
-    raise SystemExit(0)
-
-print("Installing: " + " ".join(missing))
-subprocess.run(["apt-get", "update"], check=True)
-subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", *missing], check=True)
-if shutil.which("update-initramfs"):
-    subprocess.run(["update-initramfs", "-u", "-k", "all"], check=False)
-print("Hardware package profile applied. Reboot if firmware or microcode changed.")
+        m=re.search(r'^vendor_id\s*:\s*(\S+)',Path('/proc/cpuinfo').read_text(errors='ignore'),re.M);return m.group(1) if m else 'unknown'
+    except Exception:return 'unknown'
+def available(p):return subprocess.run(['apt-cache','show',p],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+def installed(p):return subprocess.run(['dpkg-query','-W','-f=${db:Status-Abbrev}',p],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True).stdout.startswith('ii')
+def handheld():
+    s=''
+    for n in ('sys_vendor','product_name','product_version','board_name'):
+        try:s+=' '+(Path('/sys/class/dmi/id')/n).read_text(errors='ignore').strip().lower()
+        except Exception:pass
+    if 'steam deck' in s or 'jupiter' in s or 'galileo' in s:return 'steam-deck'
+    if 'rog ally' in s or ('asus' in s and 'rc71' in s):return 'rog-ally'
+    if 'legion go' in s or ('lenovo' in s and '83e1' in s):return 'legion-go'
+    if any(x in s for x in ('ayaneo','gpd win','onexplayer')):return 'generic-handheld'
+    return 'none'
+def safe_packages():
+    dev=pci();g=[x for x in dev if x[0].startswith(('0300','0302','0380'))];n=[x for x in dev if x[0].startswith(('0200','0280'))];p=[];notes=[]
+    v=cpu_vendor();p+=['amd64-microcode'] if v=='AuthenticAMD' else ['intel-microcode'] if v=='GenuineIntel' else []
+    for _,ven,_ in g:
+        if ven=='1002':p+=['firmware-amd-graphics','mesa-vulkan-drivers'];notes.append('AMD GPU: amdgpu/Mesa')
+        elif ven=='8086':p+=['firmware-intel-graphics','mesa-vulkan-drivers','intel-media-va-driver'];notes.append('Intel GPU: i915/xe/Mesa')
+        elif ven=='10de':notes.append('NVIDIA GPU: explicit open/proprietary/Nouveau profile available')
+    for _,ven,_ in n:
+        if ven=='8086':p+=['firmware-iwlwifi']
+        elif ven in {'10ec','17aa'}:p+=['firmware-realtek']
+        elif ven in {'168c','17cb'}:p+=['firmware-atheros']
+        elif ven=='14c3':p+=['firmware-mediatek']
+    seen=set();p=[x for x in p if not (x in seen or seen.add(x)) and available(x)]
+    return p,notes,len(g),len(n)
+def snapshot(desc):
+    if shutil.which('snapper') and Path('/etc/snapper/configs/root').exists():subprocess.run(['snapper','-c','root','create','--type','single','--cleanup-algorithm','number','--description',desc],check=False)
+def ensure_headers():
+    k=out(['uname','-r']).strip()
+    if (Path('/lib/modules')/k/'build').exists():return
+    pkg='linux-headers-'+k
+    if available(pkg):subprocess.run(['apt-get','install','-y',pkg],check=True)
+    if not (Path('/lib/modules')/k/'build').exists():raise SystemExit(f'Matching kernel headers are missing for {k}; refusing DKMS driver switch.')
+def secureboot_ready():
+    if not shutil.which('mokutil'):return True
+    sb='enabled' in out(['mokutil','--sb-state']).lower()
+    return not sb or (Path('/var/lib/flexos/secureboot/MOK.key').exists() and Path('/var/lib/flexos/secureboot/MOK.der').exists())
+def nvidia(mode):
+    root();snapshot('Before NVIDIA driver switch');subprocess.run(['apt-get','update'],check=True)
+    if mode in ('proprietary','open'):
+        ensure_headers()
+        if not secureboot_ready():raise SystemExit('Secure Boot is enabled. Prepare/enroll FlexOS MOK with flex-secureboot before installing NVIDIA DKMS.')
+    if mode=='proprietary':pk=['nvidia-driver','nvidia-settings'];pk=[x for x in pk if available(x)];subprocess.run(['apt-get','install','-y',*pk],check=True)
+    elif mode=='open':
+        pk=[x for x in ('nvidia-open-kernel-dkms','nvidia-driver-libs','nvidia-settings') if available(x)]
+        if 'nvidia-open-kernel-dkms' not in pk:raise SystemExit('nvidia-open-kernel-dkms is unavailable in configured repositories.')
+        subprocess.run(['apt-get','install','-y',*pk],check=True)
+    elif mode=='nouveau':
+        pk=[x for x in ('nvidia-driver','nvidia-open-kernel-dkms','nvidia-kernel-dkms','nvidia-settings') if installed(x)]
+        if pk:subprocess.run(['apt-get','remove','-y',*pk],check=True)
+    else:raise SystemExit('NVIDIA mode: proprietary|open|nouveau')
+    subprocess.run(['update-initramfs','-u','-k','all'],check=False);subprocess.run(['depmod','-a'],check=False)
+    if Path('/var/lib/flexos/secureboot/MOK.key').exists() and mode in ('proprietary','open'):subprocess.run(['flex-secureboot','sign-modules'],check=False)
+    print('NVIDIA profile applied:',mode,'— reboot recommended.')
+def apply_safe():
+    root();p,_,_,_=safe_packages();missing=[x for x in p if not installed(x)]
+    if missing:subprocess.run(['apt-get','update'],check=True);subprocess.run(['apt-get','install','-y','--no-install-recommends',*missing],check=True)
+    subprocess.run(['update-initramfs','-u','-k','all'],check=False);print('Safe hardware packages applied.')
+def apply_handheld():
+    root();kind=handheld()
+    if kind=='none':raise SystemExit('No supported handheld profile detected.')
+    apply_safe();Path('/etc/flexos').mkdir(parents=True,exist_ok=True);Path('/etc/flexos/handheld-profile').write_text(kind+'\n')
+    subprocess.run(['apt-get','install','-y','power-profiles-daemon','gamemode','mangohud'],check=False)
+    print('Handheld profile:',kind,'applied. Gamescope can be installed from Flex Gaming.')
+def status():
+    p,notes,g,n=safe_packages();print('CPU vendor:',cpu_vendor());print('GPU devices:',g);[print('  -',x) for x in notes];print('Network devices:',n);print('Handheld:',handheld());print('Safe hardware packages:');[print(f"  {'installed' if installed(x) else 'missing':9} {x}") for x in p]
+def main():
+    a=sys.argv[1:]
+    if not a:status()
+    elif a[0]=='--apply-safe':apply_safe()
+    elif a[0]=='--nvidia' and len(a)==2:nvidia(a[1])
+    elif a[0]=='--apply-handheld':apply_handheld()
+    elif a[0] in ('--status','status'):status()
+    else:raise SystemExit('Usage: flex-hwd [--apply-safe] [--nvidia proprietary|open|nouveau] [--apply-handheld]')
+if __name__=='__main__':main()

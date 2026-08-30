@@ -1,0 +1,48 @@
+name: Check CachyOS Kernel Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 0'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Compare CachyOS source with FlexOS kernel-latest
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json,re,urllib.request,os
+          h={'User-Agent':'FlexOS-kernel-watch/1','Authorization':'Bearer '+os.environ['GH_TOKEN']}
+          pkg=urllib.request.urlopen(urllib.request.Request('https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/PKGBUILD',headers=h),timeout=20).read().decode()
+          def var(n):
+              m=re.search(r'^'+re.escape(n)+r'=([^#\n]+)',pkg,re.M)
+              if not m: raise SystemExit('missing '+n)
+              return m.group(1).strip().strip('"').strip("'")
+          upstream=f"cachyos-{var('_major')}.{var('_minor')}-{var('_tagrel')}"
+          current=''
+          try:
+              rel=json.load(urllib.request.urlopen(urllib.request.Request(f"https://api.github.com/repos/{os.environ['REPO']}/releases/tags/kernel-latest",headers=h),timeout=20))
+              a=next(x for x in rel.get('assets',[]) if x['name']=='KERNEL_INFO')
+              txt=urllib.request.urlopen(urllib.request.Request(a['browser_download_url'],headers=h),timeout=20).read().decode()
+              m=re.search(r'^upstream_source=(.+)$',txt,re.M);current=m.group(1).strip() if m else ''
+          except Exception: pass
+          print('upstream='+upstream)
+          print('current='+current)
+          print('needs_build='+('true' if upstream!=current else 'false'))
+          PY
+      - name: Trigger kernel build only when upstream changed
+        if: steps.check.outputs.needs_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-cachyos-kernel.yml --ref main
+      - name: Report
+        run: echo "upstream=${{ steps.check.outputs.upstream }} current=${{ steps.check.outputs.current }} build=${{ steps.check.outputs.needs_build }}"
