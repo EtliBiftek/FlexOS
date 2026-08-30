@@ -31,7 +31,9 @@ jobs:
           chmod +x config/includes.chroot/etc/grub.d/41_flexos_recovery || true
 
       - name: Validate source tree
-        run: ./scripts/validate.sh
+        run: |
+          ./scripts/validate.sh
+          ./scripts/validate-cachyos-stack.sh
 
       - name: Validate FlexOS component packages
         run: |
@@ -68,12 +70,17 @@ jobs:
           df -h /
 
       - name: Build inside Debian 13
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           docker run --rm --privileged \
             -e GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" \
             -e GITHUB_COMMIT_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" \
             -e GITHUB_SHA="$GITHUB_SHA" \
             -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            -e GITHUB_TOKEN \
+            -e FLEXOS_REQUIRE_CACHY_KERNEL=1 \
+            -e FLEXOS_FETCH_CACHY_KERNEL=1 \
             -v "$PWD:/workspace" \
             -w /workspace \
             debian:13 \
