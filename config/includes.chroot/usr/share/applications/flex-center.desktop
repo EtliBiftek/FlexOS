@@ -6,4 +6,4 @@ Comment[tr]=FlexOS sistemini yönet
 Exec=flex-center
 Icon=flexos-logo
 Terminal=false
-Categories=System;Settings;
+Categories=System;Settings;X-FlexOS;

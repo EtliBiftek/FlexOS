@@ -8,5 +8,5 @@ Exec=flexos-installer
 TryExec=flexos-installer
 Icon=flexos-logo
 Terminal=false
-Categories=System;
+Categories=System;X-FlexOS;
 NoDisplay=true

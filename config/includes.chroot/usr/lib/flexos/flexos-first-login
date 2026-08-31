@@ -9,8 +9,11 @@ mkdir -p "$(dirname "$marker")" "$HOME/Desktop" "$HOME/Downloads" "$HOME/Documen
 command -v plasma-apply-colorscheme >/dev/null 2>&1 && plasma-apply-colorscheme BreezeDark >/dev/null 2>&1 || true
 command -v plasma-apply-desktoptheme >/dev/null 2>&1 && plasma-apply-desktoptheme breeze-dark >/dev/null 2>&1 || true
 command -v plasma-apply-wallpaperimage >/dev/null 2>&1 && plasma-apply-wallpaperimage /usr/share/wallpapers/FlexOS/contents/images/2560x1440.svg >/dev/null 2>&1 || true
+command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 
+live=0
 if grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
+  live=1
   cp -f /usr/share/applications/flexos-installer.desktop "$HOME/Desktop/Install FlexOS.desktop" 2>/dev/null || true
   chmod +x "$HOME/Desktop/Install FlexOS.desktop" 2>/dev/null || true
 else
@@ -18,6 +21,93 @@ else
   if [[ ! -e "$welcome_marker" ]] && command -v flex-welcome >/dev/null 2>&1; then
     (sleep 2; flex-welcome >/dev/null 2>&1) &
   fi
+fi
+
+plasma_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/plasma-org.kde.plasma.desktop-appletsrc"
+for _ in $(seq 1 20); do
+  [[ -f "$plasma_cfg" ]] && grep -q 'org.kde.plasma.kickoff' "$plasma_cfg" 2>/dev/null && break
+  sleep 0.25
+done
+
+if [[ -f "$plasma_cfg" ]]; then
+  FLEXOS_LIVE="$live" PLASMA_CFG="$plasma_cfg" python3 - <<'PY'
+import os
+from pathlib import Path
+
+path=Path(os.environ['PLASMA_CFG'])
+lines=path.read_text(encoding='utf-8',errors='replace').splitlines()
+
+def section_plugins(data):
+    current=None
+    result={}
+    for line in data:
+        if line.startswith('[') and line.endswith(']'):
+            current=line
+        elif current and line.startswith('plugin='):
+            result[current]=line.split('=',1)[1].strip()
+    return result
+
+def set_key(data,section,key,value):
+    header=section
+    try:
+        start=data.index(header)
+    except ValueError:
+        if data and data[-1] != '':
+            data.append('')
+        data.extend([header,f'{key}={value}'])
+        return True
+    end=len(data)
+    for i in range(start+1,len(data)):
+        if data[i].startswith('[') and data[i].endswith(']'):
+            end=i
+            break
+    prefix=f'{key}='
+    for i in range(start+1,end):
+        if data[i].startswith(prefix):
+            new=f'{key}={value}'
+            if data[i] != new:
+                data[i]=new
+                return True
+            return False
+    data.insert(end,f'{key}={value}')
+    return True
+
+live=os.environ.get('FLEXOS_LIVE')=='1'
+plugins=section_plugins(lines)
+changed=False
+
+favorites=[
+    'applications:flex-center.desktop',
+    'applications:flex-welcome.desktop',
+    'applications:flex-recovery.desktop',
+    'applications:flex-system-report.desktop',
+    'applications:firefox-esr.desktop',
+    'applications:systemsettings.desktop',
+    'applications:org.kde.dolphin.desktop',
+]
+if live:
+    favorites.insert(1,'applications:flexos-installer.desktop')
+
+for section,plugin in plugins.items():
+    general=section+'[Configuration][General]'
+    if plugin=='org.kde.plasma.kickoff':
+        changed |= set_key(lines,general,'favorites',','.join(favorites))
+        changed |= set_key(lines,general,'favoritesPortedToKAstats','false')
+    elif plugin in {'org.kde.plasma.icontasks','org.kde.plasma.taskmanager'}:
+        launchers=[
+            'applications:flex-center.desktop',
+            'applications:systemsettings.desktop',
+            'applications:org.kde.dolphin.desktop',
+            'applications:firefox-esr.desktop',
+        ]
+        if live:
+            launchers.append('applications:flexos-installer.desktop')
+        changed |= set_key(lines,general,'launchers',','.join(launchers))
+
+if changed:
+    path.write_text('\n'.join(lines).rstrip()+'\n',encoding='utf-8')
+PY
+  (sleep 1; systemctl --user restart plasma-plasmashell.service >/dev/null 2>&1 || true) &
 fi
 
 touch "$marker"

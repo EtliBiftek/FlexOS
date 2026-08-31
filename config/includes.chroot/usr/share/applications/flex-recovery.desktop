@@ -7,4 +7,4 @@ Comment[tr]=FlexOS onarım araçlarını aç
 Exec=flex-center --page recovery
 Icon=flexos-logo
 Terminal=false
-Categories=System;Settings;
+Categories=System;Settings;X-FlexOS;
