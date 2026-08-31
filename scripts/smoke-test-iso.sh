@@ -144,7 +144,7 @@ cmp -s "$tmp/initrd-generic" "$tmp/initrd-custom" || {
   exit 1
 }
 
-# KDE-only invariant.
+# Desktop profile invariant.
 cat_sq /usr/share/flexos/desktop-profiles.json >"$tmp/desktops.json"
 
 python3 - "$tmp/desktops.json" <<'PY'
@@ -154,7 +154,7 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)
 
-assert set(data) == {"kde"}, data
+assert set(data) == {"kde", "gnome", "hyprland"}, data
 PY
 
 # Alpha regressions that must never return.
