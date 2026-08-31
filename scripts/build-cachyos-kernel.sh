@@ -87,14 +87,17 @@ if [[ -x scripts/config ]]; then
   scripts/config --set-str LOCALVERSION "-flexos-cachy"
   scripts/config -d LOCALVERSION_AUTO
 
-  # Debian live-boot must be able to discover the ISO before it can load
-  # additional modules from the live filesystem. CachyOS keeps several pieces
-  # of the optical/live-media path modular, which can leave a custom live initrd
-  # unable to see QEMU's PIIX CD-ROM. Keep the minimal live boot path built in.
+  # Debian live-boot must be able to discover and mount the ISO root filesystem
+  # before it can depend on modules from that filesystem. Keep every essential
+  # optical/live-media component built directly into vmlinuz. In particular,
+  # live-boot mounts filesystem.squashfs through /dev/loop0; CachyOS currently
+  # ships BLK_DEV_LOOP as a module, which is too late for this initramfs path.
   scripts/config -e ATA_PIIX
   scripts/config -e BLK_DEV_SR
   scripts/config -e ISO9660_FS
+  scripts/config -e BLK_DEV_LOOP
   scripts/config -e SQUASHFS
+  scripts/config -e SQUASHFS_XZ
   scripts/config -e OVERLAY_FS
 fi
 
@@ -114,13 +117,15 @@ fi
 
 make "${build_flags[@]}" olddefconfig
 
-# Do not publish a kernel that can reproduce the live-boot medium discovery
-# failure. These must be built into vmlinuz, not merely available as modules.
+# Do not publish a kernel that can reproduce a live-boot rootfs failure. These
+# must be built into vmlinuz, not merely available as modules.
 required_live_boot_builtin=(
   CONFIG_ATA_PIIX
   CONFIG_BLK_DEV_SR
   CONFIG_ISO9660_FS
+  CONFIG_BLK_DEV_LOOP
   CONFIG_SQUASHFS
+  CONFIG_SQUASHFS_XZ
   CONFIG_OVERLAY_FS
 )
 for symbol in "${required_live_boot_builtin[@]}"; do
