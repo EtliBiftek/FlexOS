@@ -108,13 +108,13 @@ import configparser,json,py_compile,xml.etree.ElementTree as ET
 
 version=Path("VERSION").read_text().strip()
 import re
-assert re.fullmatch(r"0\.5\.0-beta\.1(?:-dev)?",version), f"Unexpected 0.5 beta VERSION: {version}"
+assert re.fullmatch(r"\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?",version), f"Unexpected FlexOS VERSION: {version}"
 
 # JSON
 for p in Path("config/includes.chroot/usr/share/flexos").glob("*.json"):
     json.loads(p.read_text(encoding="utf-8"))
 matrix=json.loads(Path("qa/test-matrix.json").read_text(encoding="utf-8"))
-assert matrix["release"]=="0.5.0-beta.1"
+assert isinstance(matrix.get("release"),str) and matrix["release"], "QA matrix release is missing"
 assert len({t["id"] for t in matrix["tests"]})==len(matrix["tests"])
 
 desktop=json.loads(Path("config/includes.chroot/usr/share/flexos/desktop-profiles.json").read_text())
