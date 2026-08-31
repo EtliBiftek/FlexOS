@@ -75,12 +75,14 @@ grep -qx 'ID=flexos' "$tmp/os-release" || {
   exit 1
 }
 
-grep -qx 'BUILD_ID="0\.5\.0-beta\.1-dev"' "$tmp/os-release" || {
-  echo "ERROR: unexpected FlexOS beta build ID." >&2
-  echo "Detected BUILD_ID:" >&2
-  grep '^BUILD_ID=' "$tmp/os-release" >&2 || true
+expected_build_id="$(tr -d '\r\n' < VERSION)"
+detected_build_id="$(sed -n 's/^BUILD_ID="\(.*\)"$/\1/p' "$tmp/os-release")"
+if [[ "$detected_build_id" != "$expected_build_id" ]]; then
+  echo "ERROR: unexpected FlexOS build ID." >&2
+  echo "Expected BUILD_ID: $expected_build_id" >&2
+  echo "Detected BUILD_ID: ${detected_build_id:-<missing>}" >&2
   exit 1
-}
+fi
 
 cat_sq /var/lib/dpkg/status >"$tmp/dpkg-status"
 
