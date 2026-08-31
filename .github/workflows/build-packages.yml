@@ -39,6 +39,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y dpkg-dev apt-utils gnupg
 
+      - name: Prepare package output
+        run: |
+          sudo rm -rf dist
+          mkdir -p dist/packages dist/aptrepo
+          test -w dist/packages
+          echo "Package output owner: $(stat -c '%U:%G %a' dist/packages)"
+
       - name: Build component packages
         run: |
           EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
