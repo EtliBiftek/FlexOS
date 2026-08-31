@@ -1,10 +1,11 @@
 [Unit]
 Description=FlexOS CI boot sentinel
 ConditionKernelCommandLine=flexos.ci=1
+After=flexos-profile.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'printf "FLEXOS_CI_KERNEL=" >/dev/ttyS0; uname -r >/dev/ttyS0; printf "FLEXOS_CI_BOOT_OK\n" >/dev/ttyS0'
+ExecStart=/bin/sh -c 'if systemctl is-failed --quiet flexos-profile.service; then printf "FLEXOS_CI_FAILED_UNIT=flexos-profile.service\n" >/dev/ttyS0; systemctl poweroff --no-block; exit 1; fi; printf "FLEXOS_CI_KERNEL=" >/dev/ttyS0; uname -r >/dev/ttyS0; printf "FLEXOS_CI_BOOT_OK\n" >/dev/ttyS0; systemctl poweroff --no-block'
 
 [Install]
 WantedBy=multi-user.target
