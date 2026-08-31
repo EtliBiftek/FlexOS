@@ -6,7 +6,7 @@ ConditionPathExists=/usr/lib/flexos/flex-profile-apply
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/flexos/flex-profile-apply
-TimeoutStartSec=8s
+TimeoutStartSec=30s
 RemainAfterExit=yes
 
 [Install]
