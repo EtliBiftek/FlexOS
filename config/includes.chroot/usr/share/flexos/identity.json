@@ -1,7 +1,7 @@
 {
   "name": "FlexOS",
-  "version": "0.5 Beta Preview",
-  "build_id": "0.5.0-beta.1-dev",
+  "version": "0.9",
+  "build_id": "0.9",
   "channel": "beta-development",
   "creator": "Pifo",
   "base": "Debian 13 (Trixie)",
