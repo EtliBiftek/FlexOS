@@ -4,15 +4,43 @@ set -Eeuo pipefail
 ISO="${1:?Usage: qemu-boot-smoke.sh FlexOS.iso}"
 TIMEOUT="${FLEXOS_QEMU_TIMEOUT:-240}"
 
-for c in xorriso qemu-system-x86_64 timeout grep; do
+for c in xorriso qemu-system-x86_64 timeout grep sed; do
   command -v "$c" >/dev/null 2>&1 || { echo "Missing command: $c" >&2; exit 2; }
 done
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-xorriso -osirrox on -indev "$ISO" -extract /live/vmlinuz "$tmp/vmlinuz" >/dev/null 2>&1
-xorriso -osirrox on -indev "$ISO" -extract /live/initrd.img "$tmp/initrd.img" >/dev/null 2>&1
+# Do not use /live/vmlinuz and /live/initrd.img independently here. live-build
+# creates those generic Syslinux aliases separately, so a stale Debian initrd
+# could previously be paired with the FlexOS kernel and let this test miss the
+# broken versioned GRUB entry.
+xorriso -indev "$ISO" \
+  -find /live -maxdepth 1 -type f -name 'vmlinuz-*-flexos-cachy' -exec lsdl -- \
+  >"$tmp/custom-kernel-list.txt" 2>/dev/null
+
+mapfile -t custom_kernels < <(
+  sed -n "s#.*'\(/live/vmlinuz-[^']*-flexos-cachy\)'.*#\1#p" "$tmp/custom-kernel-list.txt"
+)
+
+if (( ${#custom_kernels[@]} != 1 )); then
+  printf '[FAIL] expected exactly one versioned FlexOS CachyOS-derived live kernel, found %d.\n' "${#custom_kernels[@]}" >&2
+  cat "$tmp/custom-kernel-list.txt" >&2 || true
+  exit 1
+fi
+
+kernel_iso="${custom_kernels[0]}"
+kernel_version="${kernel_iso#/live/vmlinuz-}"
+initrd_iso="/live/initrd.img-${kernel_version}"
+
+if ! xorriso -osirrox on -indev "$ISO" -extract "$kernel_iso" "$tmp/vmlinuz" >/dev/null 2>&1; then
+  echo "[FAIL] unable to extract versioned live kernel: $kernel_iso" >&2
+  exit 1
+fi
+if ! xorriso -osirrox on -indev "$ISO" -extract "$initrd_iso" "$tmp/initrd.img" >/dev/null 2>&1; then
+  echo "[FAIL] ISO is missing the version-matched live initrd: $initrd_iso" >&2
+  exit 1
+fi
 
 log="$tmp/qemu.log"
 
