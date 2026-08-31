@@ -7,7 +7,7 @@ ISO="${1:-}"
   exit 2
 }
 
-for cmd in xorriso sha256sum unsquashfs grep python3; do
+for cmd in xorriso sha256sum unsquashfs grep python3 cmp; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "$cmd is required" >&2
     exit 1
@@ -41,26 +41,29 @@ grep -Eqi 'UEFI|EFI' "$tmp/el-torito.txt" || {
   exit 1
 }
 
-for required in \
-  /live/filesystem.squashfs \
-  /live/vmlinuz \
-  /live/initrd.img
-do
-  grep -Fq "$required" "$tmp/iso-files.txt" || {
-    echo "ERROR: ISO is missing $required" >&2
-    exit 1
-  }
-done
+# Extracting by exact ISO path avoids false positives such as treating
+# initrd.img-<version> as if the generic /live/initrd.img alias existed.
+extract_iso_file() {
+  local path="$1" output="$2"
+  rm -f "$output"
+  if ! xorriso \
+    -osirrox on \
+    -indev "$ISO" \
+    -extract "$path" "$output" \
+    >"$tmp/extract-$(basename "$output").txt" 2>&1; then
+    echo "ERROR: ISO is missing or cannot extract $path" >&2
+    cat "$tmp/extract-$(basename "$output").txt" >&2
+    return 1
+  fi
+  if [[ ! -s "$output" ]]; then
+    echo "ERROR: ISO file is empty: $path" >&2
+    return 1
+  fi
+}
 
-if ! xorriso \
-  -osirrox on \
-  -indev "$ISO" \
-  -extract /live/filesystem.squashfs "$tmp/filesystem.squashfs" \
-  >"$tmp/extract.txt" 2>&1; then
-  echo "ERROR: failed to extract live filesystem from ISO:" >&2
-  cat "$tmp/extract.txt" >&2
-  exit 1
-fi
+extract_iso_file /live/filesystem.squashfs "$tmp/filesystem.squashfs"
+extract_iso_file /live/vmlinuz "$tmp/vmlinuz-generic"
+extract_iso_file /live/initrd.img "$tmp/initrd-generic"
 
 cat_sq() {
   unsquashfs -cat "$tmp/filesystem.squashfs" "${1#/}"
@@ -118,6 +121,29 @@ grep -q '^Package: linux-image-amd64$' "$tmp/dpkg-status" || {
   exit 1
 }
 
+# GRUB uses the versioned pair while Syslinux uses the generic aliases. Verify
+# both point to the exact same FlexOS kernel/initramfs so a structurally valid
+# ISO cannot hide a missing or mismatched custom initrd.
+custom_kernel_pkg="$(grep -Em1 '^Package: linux-image-[0-9][^[:space:]]*-flexos-cachy$' "$tmp/dpkg-status" | cut -d' ' -f2 || true)"
+if [[ -z "$custom_kernel_pkg" ]]; then
+  echo "ERROR: unable to identify the versioned FlexOS CachyOS kernel package." >&2
+  exit 1
+fi
+custom_kernel_version="${custom_kernel_pkg#linux-image-}"
+
+extract_iso_file "/live/vmlinuz-${custom_kernel_version}" "$tmp/vmlinuz-custom"
+extract_iso_file "/live/initrd.img-${custom_kernel_version}" "$tmp/initrd-custom"
+
+cmp -s "$tmp/vmlinuz-generic" "$tmp/vmlinuz-custom" || {
+  echo "ERROR: /live/vmlinuz does not match vmlinuz-${custom_kernel_version}." >&2
+  exit 1
+}
+
+cmp -s "$tmp/initrd-generic" "$tmp/initrd-custom" || {
+  echo "ERROR: /live/initrd.img does not match initrd.img-${custom_kernel_version}." >&2
+  exit 1
+}
+
 # KDE-only invariant.
 cat_sq /usr/share/flexos/desktop-profiles.json >"$tmp/desktops.json"
 
@@ -172,4 +198,4 @@ done
 
 sha256sum "$ISO"
 
-echo "FlexOS ISO structural + CachyOS-kernel live-filesystem smoke test passed."
+echo "FlexOS ISO structural + version-matched CachyOS-kernel/initramfs smoke test passed."
