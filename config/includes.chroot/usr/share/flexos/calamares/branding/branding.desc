@@ -9,10 +9,10 @@ windowPlacement: center
 strings:
     productName:         FlexOS
     shortProductName:    FlexOS
-    version:             0.5 Beta Preview
-    shortVersion:        0.5
-    versionedName:       FlexOS 0.5 Beta Preview
-    shortVersionedName:  FlexOS 0.5
+    version:             ""
+    shortVersion:        ""
+    versionedName:       FlexOS
+    shortVersionedName:  FlexOS
     bootloaderEntryName: FlexOS
     productUrl:          https://github.com/EtliBiftek/FlexOS
     supportUrl:          https://github.com/EtliBiftek/FlexOS/issues
@@ -20,9 +20,10 @@ strings:
     releaseNotesUrl:     https://github.com/EtliBiftek/FlexOS/releases
     donateUrl:           ""
 
-# CachyOS-style Calamares layout: the installation steps stay in a compact
-# horizontal strip at the bottom, with the normal Back / Next / Cancel row.
-sidebar: widget,bottom
+# The traditional widget progress view is designed for a vertical sidebar.
+# Keeping it on the left avoids the cramped bottom-left layout while preserving
+# clear installation-step visibility.
+sidebar: widget,left
 navigation: widget,bottom
 
 images:
@@ -33,8 +34,6 @@ images:
 slideshow: "show.qml"
 slideshowAPI: 2
 
-# Monochrome FlexOS palette. The full QWidget treatment lives in
-# stylesheet.qss; these values are also consumed directly by the sidebar.
 style:
     SidebarBackground:        "#17191c"
     SidebarText:              "#9a9da3"

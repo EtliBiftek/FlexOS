@@ -1,7 +1,4 @@
-/* FlexOS Calamares — monochrome dark installer theme.
- * Layout follows the compact CachyOS Calamares presentation while keeping
- * FlexOS branding and a black / grey palette.
- */
+/* FlexOS Calamares — monochrome dark installer theme. */
 
 QWidget {
     background-color: #1b1d20;
@@ -219,13 +216,10 @@ QToolTip {
     padding: 4px;
 }
 
-/* Calamares' progress strip. The actual selected-step colors also come from
- * branding.desc, so this remains readable on versions with different widget
- * internals.
- */
+/* Calamares' widget progress view is kept in its native vertical layout. */
 #sidebarApp {
-    background-color: #17191c;
-    border-top: 1px solid #303338;
+    background-color: #15171a;
+    border-right: 1px solid #303338;
 }
 
 #navigationWidget {

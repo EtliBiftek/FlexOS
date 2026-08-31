@@ -29,7 +29,7 @@ set +e
 sudo -n env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
  DISPLAY="$DISPLAY" LANG="${LANG:-C.UTF-8}" XDG_CONFIG_HOME=/etc/flexos/calamares-root-config QT_STYLE_OVERRIDE=Breeze \
  QT_QPA_PLATFORM=xcb QT_AUTO_SCREEN_SCALE_FACTOR=1 QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1 \
- /usr/bin/calamares -d "$@" >>"$LOG" 2>&1
+ /usr/bin/calamares -D6 "$@" >>"$LOG" 2>&1
 rc=$?
 set -e
 if [[ $rc -ne 0 ]]; then

@@ -10,6 +10,20 @@ chmod 0755 \
   /usr/lib/flexos/flex-postinstall /usr/lib/flexos/flex-recovery-console \
   /etc/grub.d/41_flexos_recovery
 
+# Keep FlexOS application chrome version-neutral. The release version remains
+# available to system tooling through /etc/os-release and FlexOS metadata.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('/usr/bin/flex-welcome')
+if p.exists():
+    text = p.read_text(encoding='utf-8')
+    text = text.replace(
+        'FlexOS 0.5 Beta Preview\\nKDE Plasma Edition · Pifo',
+        'FlexOS\\nKDE Plasma · Pifo',
+    )
+    p.write_text(text, encoding='utf-8')
+PY
+
 printf 'flexos\n' > /etc/hostname
 cat > /etc/hosts <<'EOF'
 127.0.0.1 localhost

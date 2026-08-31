@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-. /etc/os-release
-printf '%s\n' "${PRETTY_NAME:-FlexOS}"
-printf '%s\n' "Build: ${BUILD_ID:-unknown}"
+printf '%s\n' "FlexOS"
 printf '%s\n' "Creator: Pifo"
 printf '%s\n' "Base: Debian 13 (Trixie)"
 printf '%s\n' "Desktop: KDE Plasma 6"
