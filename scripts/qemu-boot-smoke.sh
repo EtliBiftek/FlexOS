@@ -32,6 +32,12 @@ timeout "$TIMEOUT" qemu-system-x86_64 \
 rc=${PIPESTATUS[0]}
 set -e
 
+if grep -q 'FLEXOS_CI_FAILED_UNIT=' "$log"; then
+  failed_unit="$(grep -oEm1 'FLEXOS_CI_FAILED_UNIT=[^[:space:]]+' "$log" | cut -d= -f2- || true)"
+  echo "[FAIL] FlexOS reached userspace, but ${failed_unit:-a required service} failed during boot." >&2
+  exit 1
+fi
+
 if grep -q "FLEXOS_CI_BOOT_OK" "$log"; then
   if grep -Eq 'FLEXOS_CI_KERNEL=[^[:space:]]*flexos-cachy' "$log"; then
     kernel="$(grep -oEm1 'FLEXOS_CI_KERNEL=[^[:space:]]+' "$log" | cut -d= -f2- || true)"
