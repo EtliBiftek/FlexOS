@@ -14,7 +14,16 @@ args=ap.parse_args()
 
 root=Path(args.source_root).resolve()
 out=Path(args.output).resolve()
-out.mkdir(parents=True,exist_ok=True)
+try:
+    out.mkdir(parents=True,exist_ok=True)
+    probe=out/".flexos-write-test"
+    probe.write_text("ok\n",encoding="utf-8")
+    probe.unlink()
+except OSError as exc:
+    raise SystemExit(
+        f"Package output directory is not writable: {out} ({exc}). "
+        "Reset its ownership/permissions before building packages."
+    ) from exc
 mapping=json.loads((root/"packages/package-map.json").read_text(encoding="utf-8"))
 
 def copy_item(src:Path,dst:Path):
