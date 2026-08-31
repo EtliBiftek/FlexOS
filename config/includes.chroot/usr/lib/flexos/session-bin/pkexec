@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import json, os, socket, sys
+
+path=os.environ.get("FLEXOS_PRIV_SOCKET","")
+command=sys.argv[1:]
+if not command:
+    raise SystemExit(64)
+if not path:
+    os.execv("/usr/bin/pkexec",["/usr/bin/pkexec",*command])
+
+sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+try:
+    sock.connect(path)
+    sock.sendall((json.dumps({"command":command},ensure_ascii=False)+"\n").encode())
+    stream=sock.makefile("r",encoding="utf-8",errors="replace")
+    code=1
+    for line in stream:
+        try:msg=json.loads(line)
+        except Exception:
+            print(line,end="");continue
+        if msg.get("type")=="out":
+            print(msg.get("data",""),flush=True)
+        elif msg.get("type")=="done":
+            if msg.get("message"):
+                print(msg["message"],file=sys.stderr)
+            code=int(msg.get("code",1))
+            break
+    raise SystemExit(code)
+except (ConnectionError,OSError) as exc:
+    print(f"FlexOS privileged session error: {exc}",file=sys.stderr)
+    raise SystemExit(126)
+finally:
+    sock.close()

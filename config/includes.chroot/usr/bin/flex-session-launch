@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os, secrets, socket, subprocess, sys, time
+from pathlib import Path
+
+if len(sys.argv)<2:
+    raise SystemExit("Usage: flex-session-launch <application> [args...]")
+
+uid=os.getuid()
+runtime=Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}")
+if runtime != Path(f"/run/user/{uid}"):
+    runtime=Path(f"/run/user/{uid}")
+runtime.mkdir(parents=True,exist_ok=True)
+sock=runtime/f"flexos-priv-{os.getpid()}-{secrets.token_hex(4)}.sock"
+
+helper=subprocess.Popen(
+    ["/usr/bin/pkexec","/usr/lib/flexos/flex-privileged-session","--socket",str(sock),"--uid",str(uid)],
+    stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+)
+ready=False
+deadline=time.monotonic()+120
+while time.monotonic()<deadline:
+    if helper.poll() is not None:
+        err=(helper.stderr.read() if helper.stderr else "").strip()
+        raise SystemExit(err or "Administrator authorization was cancelled.")
+    if sock.exists():
+        ready=True
+        break
+    time.sleep(0.05)
+if not ready:
+    helper.terminate()
+    raise SystemExit("Timed out waiting for administrator authorization.")
+
+env=os.environ.copy()
+env["FLEXOS_PRIV_SOCKET"]=str(sock)
+env["PATH"]="/usr/lib/flexos/session-bin:"+env.get("PATH","/usr/bin:/bin")
+app=subprocess.Popen(sys.argv[1:],env=env)
+code=app.wait()
+
+try:
+    s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    s.settimeout(1)
+    s.connect(str(sock))
+    s.sendall(b'{"op":"quit"}\n')
+    s.close()
+except Exception:
+    pass
+
+try:
+    helper.wait(timeout=2)
+except subprocess.TimeoutExpired:
+    helper.terminate()
+    try:helper.wait(timeout=1)
+    except subprocess.TimeoutExpired:helper.kill()
+raise SystemExit(code)

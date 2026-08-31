@@ -2,26 +2,39 @@
 set -eu
 
 chmod 0755 \
-  /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome /usr/bin/flex-system-report /usr/bin/flex-self-update /usr/bin/flex-beta-check \
+  /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome /usr/bin/flex-session-launch /usr/bin/flex-system-report /usr/bin/flex-self-update /usr/bin/flex-beta-check \
   /usr/bin/flexos-info /usr/bin/flexos-installer \
   /usr/lib/flexos/flex-admin /usr/lib/flexos/flexsuite.py /usr/lib/flexos/flex-branding-apply /usr/lib/flexos/flex-snapshot-pre \
   /usr/lib/flexos/flex-identity-apply /usr/lib/flexos/flex-package-profile-install \
   /usr/lib/flexos/flex-profile-apply /usr/lib/flexos/flexos-first-login \
-  /usr/lib/flexos/flex-postinstall /usr/lib/flexos/flex-recovery-console \
-  /etc/grub.d/41_flexos_recovery
+  /usr/lib/flexos/flex-postinstall /usr/lib/flexos/flex-desktop-install /usr/lib/flexos/flex-hyprdots-install \
+  /usr/lib/flexos/flex-privileged-session /usr/lib/flexos/session-bin/pkexec /usr/lib/flexos/session-bin/flex-center \
+  /usr/lib/flexos/flex-recovery-console /etc/grub.d/41_flexos_recovery
 
-# Keep FlexOS application chrome version-neutral. The release version remains
-# available to system tooling through /etc/os-release and FlexOS metadata.
 python3 - <<'PY'
 from pathlib import Path
-p = Path('/usr/bin/flex-welcome')
+p=Path("/usr/bin/flex-welcome")
 if p.exists():
-    text = p.read_text(encoding='utf-8')
-    text = text.replace(
-        'FlexOS 0.5 Beta Preview\\nKDE Plasma Edition · Pifo',
-        'FlexOS\\nKDE Plasma · Pifo',
-    )
-    p.write_text(text, encoding='utf-8')
+    text=p.read_text(encoding="utf-8")
+    replacements={
+        'MARK=Path.home()/".config/flexos/welcome-complete-0.5-beta"':
+            'MARK=Path.home()/".config/flexos/welcome-complete"',
+        'FlexOS 0.5 Beta Preview\\nKDE Plasma Edition · Pifo':
+            'FlexOS\\nPifo',
+        "FlexOS yalnızca KDE Plasma 6 kullanır. Flex Center; güncelleme, sürücü, snapshot, recovery, performans, paket profilleri, gizlilik ve güvenlik araçlarını tek yerde toplar.":
+            "FlexOS; KDE Plasma, GNOME veya Hyprland ile kurulabilir. Flex Center; güncelleme, sürücü, snapshot, recovery, performans, paket profilleri, gizlilik ve güvenlik araçlarını tek yerde toplar.",
+        "KDE Plasma'yı değiştirmeden kullanım amacınıza göre ek araç grubu seçin.":
+            "Seçtiğiniz masaüstünü değiştirmeden kullanım amacınıza göre ek araç grubu seçin.",
+        'w,l=self.base("Görünüm","FlexOS koyu KDE görünümünü yeniden uygulayabilirsiniz.")':
+            'w,l=self.base("Görünüm","KDE Plasma kullanıyorsanız FlexOS koyu görünümünü yeniden uygulayabilirsiniz.")',
+        'self.dark=QCheckBox("FlexOS koyu renk şeması, Breeze Dark masaüstü teması ve FlexOS duvar kağıdını uygula")':
+            'self.dark=QCheckBox("KDE Plasma koyu renk şemasını, Breeze Dark temasını ve FlexOS duvar kağıdını uygula")',
+        'self.dark.setChecked(True);l.addWidget(self.dark);l.addStretch();return w':
+            'self.dark.setChecked(shutil.which("plasma-apply-colorscheme") is not None);l.addWidget(self.dark);l.addStretch();return w',
+    }
+    for old,new in replacements.items():
+        text=text.replace(old,new)
+    p.write_text(text,encoding="utf-8")
 PY
 
 printf 'flexos\n' > /etc/hostname

@@ -2,14 +2,28 @@
 set -e
 python3 - <<'PY'
 from pathlib import Path
-p = Path('/usr/bin/flex-welcome')
+p=Path("/usr/bin/flex-welcome")
 if p.exists():
-    text = p.read_text(encoding='utf-8')
-    text = text.replace(
-        'FlexOS 0.5 Beta Preview\\nKDE Plasma Edition · Pifo',
-        'FlexOS\\nKDE Plasma · Pifo',
-    )
-    p.write_text(text, encoding='utf-8')
+    text=p.read_text(encoding="utf-8")
+    replacements={
+        'MARK=Path.home()/".config/flexos/welcome-complete-0.5-beta"':
+            'MARK=Path.home()/".config/flexos/welcome-complete"',
+        'FlexOS 0.5 Beta Preview\\nKDE Plasma Edition · Pifo':
+            'FlexOS\\nPifo',
+        "FlexOS yalnızca KDE Plasma 6 kullanır. Flex Center; güncelleme, sürücü, snapshot, recovery, performans, paket profilleri, gizlilik ve güvenlik araçlarını tek yerde toplar.":
+            "FlexOS; KDE Plasma, GNOME veya Hyprland ile kurulabilir. Flex Center; güncelleme, sürücü, snapshot, recovery, performans, paket profilleri, gizlilik ve güvenlik araçlarını tek yerde toplar.",
+        "KDE Plasma'yı değiştirmeden kullanım amacınıza göre ek araç grubu seçin.":
+            "Seçtiğiniz masaüstünü değiştirmeden kullanım amacınıza göre ek araç grubu seçin.",
+        'w,l=self.base("Görünüm","FlexOS koyu KDE görünümünü yeniden uygulayabilirsiniz.")':
+            'w,l=self.base("Görünüm","KDE Plasma kullanıyorsanız FlexOS koyu görünümünü yeniden uygulayabilirsiniz.")',
+        'self.dark=QCheckBox("FlexOS koyu renk şeması, Breeze Dark masaüstü teması ve FlexOS duvar kağıdını uygula")':
+            'self.dark=QCheckBox("KDE Plasma koyu renk şemasını, Breeze Dark temasını ve FlexOS duvar kağıdını uygula")',
+        'self.dark.setChecked(True);l.addWidget(self.dark);l.addStretch();return w':
+            'self.dark.setChecked(shutil.which("plasma-apply-colorscheme") is not None);l.addWidget(self.dark);l.addStretch();return w',
+    }
+    for old,new in replacements.items():
+        text=text.replace(old,new)
+    p.write_text(text,encoding="utf-8")
 PY
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 exit 0
