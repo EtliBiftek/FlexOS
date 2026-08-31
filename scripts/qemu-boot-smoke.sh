@@ -33,18 +33,20 @@ rc=${PIPESTATUS[0]}
 set -e
 
 if grep -q "FLEXOS_CI_BOOT_OK" "$log"; then
-  if grep -Eq 'Linux version [^[:space:]]*flexos-cachy' "$log" || grep -q 'flexos-cachy' "$log"; then
-    echo "[PASS] FlexOS CachyOS-derived kernel reached multi-user.target in QEMU."
+  if grep -Eq 'FLEXOS_CI_KERNEL=[^[:space:]]*flexos-cachy' "$log"; then
+    kernel="$(grep -oEm1 'FLEXOS_CI_KERNEL=[^[:space:]]+' "$log" | cut -d= -f2- || true)"
+    echo "[PASS] FlexOS CachyOS-derived kernel ${kernel:-unknown} reached multi-user.target in QEMU."
     exit 0
   fi
-  echo "[FAIL] QEMU reached live userspace, but the running kernel was not the FlexOS CachyOS-derived kernel." >&2
-  grep -m1 -E 'Linux version ' "$log" >&2 || true
+  echo "[FAIL] QEMU reached live userspace, but the runtime kernel is not the FlexOS CachyOS-derived kernel." >&2
+  grep -oEm1 'FLEXOS_CI_KERNEL=[^[:space:]]+' "$log" >&2 || true
   exit 1
 fi
 
-if grep -Fq "Unable to find a medium containing a live file system" "$log"; then
-  echo "[FAIL] QEMU initramfs could not discover the ISO live medium." >&2
-  echo "Expected optical/storage modules: ata_piix sr_mod isofs" >&2
+if grep -Fq "Unable to find a medium containing a live file system" "$log" || \
+   grep -Fq "Can not mount /dev/loop0" "$log"; then
+  echo "[FAIL] QEMU initramfs could not mount the ISO live filesystem." >&2
+  echo "Expected built-in live boot support: ata_piix sr_mod isofs loop squashfs squashfs_xz" >&2
   grep -m1 -E 'Linux version ' "$log" >&2 || true
   tail -n 160 "$log" >&2
   exit 1
@@ -53,7 +55,7 @@ fi
 if grep -Eq 'Linux version [^[:space:]]*flexos-cachy' "$log"; then
   echo "[FAIL] QEMU booted the FlexOS CachyOS-derived kernel but did not reach live userspace (qemu exit $rc)." >&2
 else
-  echo "[FAIL] QEMU booted a kernel, but it was not the FlexOS CachyOS-derived kernel." >&2
+  echo "[FAIL] QEMU did not reach the FlexOS CI boot sentinel (qemu exit $rc)." >&2
   grep -m1 -E 'Linux version ' "$log" >&2 || true
 fi
 
