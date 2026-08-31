@@ -92,7 +92,10 @@ pos=text.find("sequence:")
 if pos < 0:
     raise SystemExit("Calamares settings.conf has no sequence")
 before,after=text[:pos],text[pos:]
-before=before.rstrip()+"\n"+instances+"\n"
+if "instances:" in before:
+    before=before.rstrip()+"\n"+instances+"\n"
+else:
+    before=before.rstrip()+"\n\ninstances:\n"+instances+"\n"
 text=before+after
 lines=text.splitlines()
 
