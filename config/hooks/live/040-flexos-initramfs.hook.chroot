@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+# The custom kernel package can be installed before initramfs-tools/live-boot.
+# Rebuild its initramfs after the full live system is configured so the ISO has
+# a version-matched initrd with FlexOS live-boot hooks and the right modules.
+if ! command -v update-initramfs >/dev/null 2>&1; then
+    echo "ERROR: update-initramfs is unavailable; cannot prepare the FlexOS live kernel." >&2
+    exit 1
+fi
+
+found=0
+for kernel in /boot/vmlinuz-*-flexos-cachy; do
+    [ -e "$kernel" ] || continue
+    found=1
+
+    version="${kernel#/boot/vmlinuz-}"
+    modules="/lib/modules/${version}"
+    initrd="/boot/initrd.img-${version}"
+
+    if [ ! -d "$modules" ]; then
+        echo "ERROR: kernel modules are missing for ${version}." >&2
+        exit 1
+    fi
+
+    if [ -e "$initrd" ]; then
+        update-initramfs -u -k "$version"
+    else
+        update-initramfs -c -k "$version"
+    fi
+
+    if [ ! -s "$initrd" ]; then
+        echo "ERROR: failed to create ${initrd}." >&2
+        exit 1
+    fi
+
+done
+
+if [ "$found" -eq 1 ]; then
+    echo "FlexOS CachyOS-derived kernel initramfs refreshed successfully."
+fi
