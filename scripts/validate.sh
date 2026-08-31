@@ -16,12 +16,18 @@ required=(
   config/includes.chroot/usr/bin/flex-self-update config/includes.chroot/usr/bin/flex-system-report config/includes.chroot/usr/bin/flex-beta-check
   config/includes.chroot/usr/bin/flexos-installer config/includes.chroot/usr/lib/flexos/flexlib.py config/includes.chroot/usr/lib/flexos/flexsuite.py
   config/includes.chroot/usr/lib/flexos/flex-admin config/includes.chroot/usr/lib/flexos/flex-recovery-console config/includes.chroot/usr/lib/flexos/flex-postinstall
+  config/includes.chroot/usr/lib/flexos/flex-desktop-install config/includes.chroot/usr/lib/flexos/flex-hyprdots-install
   config/includes.chroot/usr/lib/systemd/system/flexos-recovery.target config/includes.chroot/usr/lib/systemd/system/flexos-recovery.service
   config/includes.chroot/usr/lib/systemd/system/flexos-ci-smoke.service config/includes.chroot/etc/grub.d/41_flexos_recovery
   config/includes.chroot/usr/share/flexos/apps.json config/includes.chroot/usr/share/flexos/identity.json
   config/includes.chroot/usr/share/flexos/desktop-profiles.json config/includes.chroot/usr/share/flexos/package-profiles.json
   config/includes.chroot/usr/share/flexos/calamares/branding/branding.desc config/includes.chroot/usr/share/flexos/calamares/branding/stylesheet.qss
   config/includes.chroot/usr/share/flexos/calamares/branding/welcome.svg config/includes.chroot/usr/share/flexos/calamares/branding/show.qml
+  config/includes.chroot/usr/share/flexos/calamares/branding/hyprdots.qml
+  config/includes.chroot/usr/share/flexos/calamares/modules/packagechooser-desktop.conf
+  config/includes.chroot/usr/share/flexos/calamares/modules/packagechooser-hyprdots.conf
+  config/includes.chroot/usr/share/flexos/calamares/modules/contextualprocess-flexdesktop.conf
+  config/includes.chroot/usr/share/flexos/calamares/modules/contextualprocess-hyprdots.conf
   config/includes.chroot/usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf
   config/includes.chroot/usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf
   config/hooks/live/010-flexos-branding.hook.chroot config/hooks/live/020-flexos-calamares.hook.chroot config/hooks/live/030-flexos-services.hook.chroot
@@ -55,13 +61,13 @@ version=Path("VERSION").read_text().strip()
 assert re.fullmatch(r"\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?",version), f"Unexpected FlexOS VERSION: {version}"
 for p in Path("config/includes.chroot/usr/share/flexos").glob("*.json"): json.loads(p.read_text(encoding="utf-8"))
 matrix=json.loads(Path("qa/test-matrix.json").read_text(encoding="utf-8")); assert isinstance(matrix.get("release"),str) and matrix["release"]; assert len({t["id"] for t in matrix["tests"]})==len(matrix["tests"])
-desktop=json.loads(Path("config/includes.chroot/usr/share/flexos/desktop-profiles.json").read_text()); assert set(desktop)=={"kde"}, "FlexOS beta must be KDE-only"
+desktop=json.loads(Path("config/includes.chroot/usr/share/flexos/desktop-profiles.json").read_text()); assert set(desktop)=={"kde","gnome","hyprland"}, "FlexOS desktop profiles must include KDE, GNOME and Hyprland"
 identity=json.loads(Path("config/includes.chroot/usr/share/flexos/identity.json").read_text()); assert identity["build_id"]==version
 osr=Path("config/includes.chroot/etc/os-release").read_text(); assert "ID=flexos" in osr; assert f'BUILD_ID="{version}"' in osr
 pkgmap=json.loads(Path("packages/package-map.json").read_text())
 for name,spec in pkgmap.items():
     for rel in spec["paths"]: assert (Path("config/includes.chroot")/rel).exists(), f"{name}: package source path missing: {rel}"
-pyfiles=[Path("config/includes.chroot/usr/bin/flex"),Path("config/includes.chroot/usr/bin/flex-center"),Path("config/includes.chroot/usr/bin/flex-welcome"),Path("config/includes.chroot/usr/bin/flex-self-update"),Path("config/includes.chroot/usr/bin/flex-system-report"),Path("config/includes.chroot/usr/bin/flex-beta-check"),Path("config/includes.chroot/usr/lib/flexos/flexlib.py"),Path("config/includes.chroot/usr/lib/flexos/flexsuite.py"),Path("config/includes.chroot/usr/lib/flexos/flex-admin"),Path("config/includes.chroot/usr/lib/flexos/flex-postinstall"),Path("config/includes.chroot/usr/lib/flexos/flex-package-profile-install"),Path("config/includes.chroot/usr/lib/flexos/flex-profile-apply"),Path("scripts/build-flexos-packages.py"),Path("scripts/version-to-deb.py"),Path("scripts/beta-gate.py"),Path("qa/record-test.py")]
+pyfiles=[Path("config/includes.chroot/usr/bin/flex"),Path("config/includes.chroot/usr/bin/flex-center"),Path("config/includes.chroot/usr/bin/flex-welcome"),Path("config/includes.chroot/usr/bin/flex-self-update"),Path("config/includes.chroot/usr/bin/flex-system-report"),Path("config/includes.chroot/usr/bin/flex-beta-check"),Path("config/includes.chroot/usr/lib/flexos/flexlib.py"),Path("config/includes.chroot/usr/lib/flexos/flexsuite.py"),Path("config/includes.chroot/usr/lib/flexos/flex-admin"),Path("config/includes.chroot/usr/lib/flexos/flex-postinstall"),Path("config/includes.chroot/usr/lib/flexos/flex-desktop-install"),Path("config/includes.chroot/usr/lib/flexos/flex-hyprdots-install"),Path("config/includes.chroot/usr/lib/flexos/flex-package-profile-install"),Path("config/includes.chroot/usr/lib/flexos/flex-profile-apply"),Path("scripts/build-flexos-packages.py"),Path("scripts/version-to-deb.py"),Path("scripts/beta-gate.py"),Path("qa/record-test.py")]
 for p in pyfiles: py_compile.compile(str(p),doraise=True)
 for p in Path("branding").rglob("*.svg"): ET.parse(p)
 for p in Path("config/includes.chroot/usr/share").rglob("*.svg"): ET.parse(p)
@@ -74,7 +80,11 @@ assert 'navigation: widget,bottom' in branding, "Calamares navigation must remai
 stylesheet=Path("config/includes.chroot/usr/share/flexos/calamares/branding/stylesheet.qss").read_text(); assert '#sidebarApp' in stylesheet and 'QPushButton:default' in stylesheet
 assert "terminal-box:" not in Path("config/includes.chroot/boot/grub/themes/flexos/theme.txt").read_text()
 assert 'Image.Text("Starting"' not in Path("config/includes.chroot/usr/share/plymouth/themes/flexos/flexos.script").read_text()
-hook=Path("config/hooks/live/020-flexos-calamares.hook.chroot").read_text(); assert "shellprocess@flexpostinstall" in hook; assert "availableFileSystemTypes" in hook; assert "stylesheet.qss" in hook
+hook=Path("config/hooks/live/020-flexos-calamares.hook.chroot").read_text()
+for token in ("packagechooser@desktop","packagechooserq@hyprdots","contextualprocess@flexdesktop","contextualprocess@flexhyprdots","shellprocess@flexpostinstall","availableFileSystemTypes","stylesheet.qss"):
+    assert token in hook, f"Calamares hook missing {token}"
+dots=Path("config/includes.chroot/usr/share/flexos/calamares/branding/hyprdots.qml").read_text()
+assert "pctrade" in dots and "end-4" in dots and "screenshots/6.png" in dots
 print("structured validation OK")
 PY
 [[ $errors -eq 0 ]] && ok "Python / JSON / SVG / desktop / beta invariants"

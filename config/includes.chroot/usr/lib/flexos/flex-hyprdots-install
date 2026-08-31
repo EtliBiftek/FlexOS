@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import os, pwd, shutil, subprocess, sys
+from pathlib import Path
+
+BASE_REPO = "https://github.com/end-4/dots-hyprland.git"
+BASE_COMMIT = "97c5bc651f68092351b24aaa935af708b1e04514"
+PRESET_REPO = "https://github.com/pctrade/end4-pC.git"
+PRESET_COMMIT = "ed05ef11426004eda5cac5280ed61d3cb3b96f36"
+
+if os.geteuid() != 0:
+    raise SystemExit("flex-hyprdots-install must run as root")
+
+preset = (sys.argv[1] if len(sys.argv) > 1 else "none").strip().lower()
+username = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+desktop = (sys.argv[3] if len(sys.argv) > 3 else "").strip().lower()
+if desktop != "hyprland" or preset in ("", "none"):
+    raise SystemExit(0)
+if preset != "end4pc":
+    raise SystemExit(f"Unsupported Hyprland dots preset: {preset}")
+if not username:
+    raise SystemExit("Missing target username")
+
+pw = pwd.getpwnam(username)
+home = Path(pw.pw_dir)
+if not home.exists():
+    home.mkdir(parents=True, exist_ok=True)
+    os.chown(home, pw.pw_uid, pw.pw_gid)
+
+state = Path("/etc/flexos")
+state.mkdir(parents=True, exist_ok=True)
+(state / "hyprdots-status").write_text("installing\n", encoding="utf-8")
+
+def root_run(cmd, timeout=14400):
+    print("+", " ".join(map(str, cmd)), flush=True)
+    env = os.environ.copy()
+    env["DEBIAN_FRONTEND"] = "noninteractive"
+    subprocess.run(list(map(str, cmd)), check=True, timeout=timeout, env=env)
+
+def user_run(cmd, timeout=14400):
+    env_cmd = [
+        "runuser", "-u", username, "--", "env",
+        f"HOME={home}", f"USER={username}", f"LOGNAME={username}",
+        "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
+    ] + list(map(str, cmd))
+    root_run(env_cmd, timeout=timeout)
+
+work = home / ".local/share/flexos/dots-hyprland"
+preset_dir = home / ".config/quickshell/end4-pC"
+sudoers = Path(f"/etc/sudoers.d/flexos-hyprdots-{username}")
+
+try:
+    sudoers.write_text(f"{username} ALL=(root) NOPASSWD: ALL\n", encoding="utf-8")
+    os.chmod(sudoers, 0o440)
+    root_run(["visudo", "-cf", str(sudoers)], timeout=30)
+
+    work.parent.mkdir(parents=True, exist_ok=True)
+    if work.exists():
+        shutil.rmtree(work)
+    root_run(["git", "clone", "--filter=blob:none", BASE_REPO, str(work)], timeout=1800)
+    root_run(["git", "-C", str(work), "checkout", "--detach", BASE_COMMIT], timeout=120)
+    root_run(["chown", "-R", f"{username}:{pw.pw_gid}", str(work)])
+
+    user_run([
+        str(work / "setup"), "install", "--via-nix", "--force",
+        "--skip-sysupdate", "--skip-plasmaintg", "--ignore-outdate",
+    ])
+
+    preset_dir.parent.mkdir(parents=True, exist_ok=True)
+    if preset_dir.exists():
+        shutil.rmtree(preset_dir)
+    root_run(["git", "clone", PRESET_REPO, str(preset_dir)], timeout=1800)
+    root_run(["git", "-C", str(preset_dir), "checkout", "--detach", PRESET_COMMIT], timeout=120)
+
+    custom = home / ".config/hypr/custom"
+    custom.mkdir(parents=True, exist_ok=True)
+    variables = custom / "variables.lua"
+    current = variables.read_text(encoding="utf-8") if variables.exists() else ""
+    marker = 'hl.env("qsConfig", "end4-pC")'
+    if marker not in current:
+        variables.write_text(current.rstrip() + "\n\n-- FlexOS selected Hyprland shell\n" + marker + "\n", encoding="utf-8")
+
+    root_run(["chown", "-R", f"{username}:{pw.pw_gid}", str(home / ".config"), str(home / ".local")])
+    (state / "hyprdots-profile").write_text("end4pc\n", encoding="utf-8")
+    (state / "hyprdots-status").write_text("installed\n", encoding="utf-8")
+finally:
+    try:
+        sudoers.unlink()
+    except FileNotFoundError:
+        pass
+
+print("FlexOS Hyprland dots installed: end4-pC (pctrade, based on end-4 illogical-impulse)")

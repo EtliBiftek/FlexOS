@@ -7,24 +7,20 @@ if [ -d /etc/calamares/branding/debian ]; then
   cp -f /usr/share/flexos/calamares/branding/flexos-logo.svg /etc/calamares/branding/debian/flexos-logo.svg
   cp -f /usr/share/flexos/calamares/branding/welcome.svg /etc/calamares/branding/debian/welcome.svg
   cp -f /usr/share/flexos/calamares/branding/show.qml /etc/calamares/branding/debian/show.qml
+  cp -f /usr/share/flexos/calamares/branding/hyprdots.qml /etc/calamares/branding/debian/hyprdots.qml
 fi
 
 mkdir -p /etc/calamares/modules
-cp -f /usr/share/flexos/calamares/modules/mount.conf /etc/calamares/modules/mount.conf
-cp -f /usr/share/flexos/calamares/modules/packagechooser-flexpackages.conf /etc/calamares/modules/
-cp -f /usr/share/flexos/calamares/modules/contextualprocess-flexpackages.conf /etc/calamares/modules/
-cp -f /usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf /etc/calamares/modules/
+for f in \
+  mount.conf \
+  packagechooser-desktop.conf packagechooser-hyprdots.conf packagechooser-flexpackages.conf \
+  contextualprocess-flexdesktop.conf contextualprocess-hyprdots.conf contextualprocess-flexpackages.conf \
+  shellprocess-flexpostinstall.conf \
+  welcome.conf locale.conf keyboard.conf
+do
+  [ -f "/usr/share/flexos/calamares/modules/$f" ] && cp -f "/usr/share/flexos/calamares/modules/$f" /etc/calamares/modules/
+done
 
-rm -f /etc/calamares/modules/packagechooser-desktop.conf
-rm -f /etc/calamares/modules/contextualprocess-flexdesktop.conf
-rm -f /usr/share/flexos/calamares/modules/packagechooser-desktop.conf
-rm -f /usr/share/flexos/calamares/modules/contextualprocess-flexdesktop.conf
-
-# Keep Debian's tested partition module but expose only the filesystems FlexOS
-# promises to QA for 0.5 beta: ext4 and Btrfs. LUKS remains enabled.
-# FlexOS 0.5 promises Btrfs rollback only with a real root subvolume.
-# Calamares 3.3's standard mount configuration uses /@; fail the ISO build
-# instead of silently shipping a top-level Btrfs layout.
 if [ ! -f /etc/calamares/modules/mount.conf ] || ! grep -Eq 'subvolume:[[:space:]]*/?@([[:space:]]|$)' /etc/calamares/modules/mount.conf; then
   echo "ERROR: Calamares mount.conf does not define a /@ Btrfs root subvolume." >&2
   exit 1
@@ -33,13 +29,9 @@ fi
 python3 - <<'PY'
 from pathlib import Path
 import re
-
 p=Path("/etc/calamares/modules/partition.conf")
 if p.exists():
     text=p.read_text()
-    def replace_active(key, value):
-        nonlocal_text = None
-        return
     rules={
         r'(?m)^\s*defaultFileSystemType:\s*.*$':'defaultFileSystemType: "ext4"',
         r'(?m)^\s*availableFileSystemTypes:\s*.*$':'availableFileSystemTypes: ["ext4","btrfs"]',
@@ -47,12 +39,7 @@ if p.exists():
         r'(?m)^\s*initialPartitioningChoice:\s*.*$':'initialPartitioningChoice: none',
     }
     for pattern,replacement in rules.items():
-        if re.search(pattern,text):
-            text=re.sub(pattern,replacement,text)
-        else:
-            text += "\n"+replacement+"\n"
-    # Debian / upstream can ship availableFileSystemTypes only as a commented
-    # example. Ensure our active key exists.
+        text=re.sub(pattern,replacement,text) if re.search(pattern,text) else text+"\n"+replacement+"\n"
     if not re.search(r'(?m)^availableFileSystemTypes:',text):
         text += '\navailableFileSystemTypes: ["ext4","btrfs"]\n'
     p.write_text(text.rstrip()+"\n")
@@ -63,21 +50,34 @@ from pathlib import Path
 
 p=Path("/etc/calamares/settings.conf")
 text=p.read_text()
-
 if "hide-back-and-next-during-exec:" not in text:
     text += "\nhide-back-and-next-during-exec: false\n"
 
-# Remove stale multi-desktop alpha references.
-lines=[
-    line for line in text.splitlines()
-    if "packagechooser@desktop" not in line
-    and "contextualprocess@flexdesktop" not in line
-]
+managed=(
+    "packagechooser@desktop","packagechooserq@hyprdots","packagechooser@packageprofile",
+    "contextualprocess@flexdesktop","contextualprocess@flexhyprdots",
+    "contextualprocess@flexpackages","shellprocess@flexpostinstall",
+)
+lines=[line for line in text.splitlines() if not any(x in line for x in managed)]
 text="\n".join(lines)+"\n"
 
-instances="""  - id: packageprofile
+instances="""  - id: desktop
+    module: packagechooser
+    config: packagechooser-desktop.conf
+  - id: hyprdots
+    module: packagechooserq
+    config: packagechooser-hyprdots.conf
+  - id: packageprofile
     module: packagechooser
     config: packagechooser-flexpackages.conf
+  - id: flexdesktop
+    module: contextualprocess
+    config: contextualprocess-flexdesktop.conf
+    weight: 8
+  - id: flexhyprdots
+    module: contextualprocess
+    config: contextualprocess-hyprdots.conf
+    weight: 8
   - id: flexpackages
     module: contextualprocess
     config: contextualprocess-flexpackages.conf
@@ -88,51 +88,39 @@ instances="""  - id: packageprofile
     weight: 3
 """
 
-if "id: packageprofile" not in text:
-    pos=text.find("sequence:")
-    if pos < 0:
-        raise SystemExit("Calamares settings.conf has no sequence")
-    before,after=text[:pos],text[pos:]
-    if "instances:" in before:
-        before=before.rstrip()+"\n"+instances+"\n"
-    else:
-        before=before.rstrip()+"\n\ninstances:\n"+instances+"\n"
-    text=before+after
-elif "id: flexpostinstall" not in text:
-    pos=text.find("sequence:")
-    before,after=text[:pos],text[pos:]
-    before=before.rstrip()+""" 
-  - id: flexpostinstall
-    module: shellprocess
-    config: shellprocess-flexpostinstall.conf
-    weight: 3
-"""
-    text=before+"\n"+after
-
+pos=text.find("sequence:")
+if pos < 0:
+    raise SystemExit("Calamares settings.conf has no sequence")
+before,after=text[:pos],text[pos:]
+before=before.rstrip()+"\n"+instances+"\n"
+text=before+after
 lines=text.splitlines()
 
-if not any("packagechooser@packageprofile" in x for x in lines):
+def insert_after(token, entries):
     for i,line in enumerate(lines):
-        if line.strip()=="- partition":
+        if line.strip()==token:
             indent=line[:len(line)-len(line.lstrip())]
-            lines[i+1:i+1]=[indent+"- packagechooser@packageprofile"]
-            break
+            lines[i+1:i+1]=[indent+e for e in entries]
+            return True
+    return False
 
-# Package profiles need final network sources; postinstall must be the final
-# target-side job before Calamares unmounts the installed system.
-if not any("contextualprocess@flexpackages" in x for x in lines):
+def insert_before(token, entries):
     for i,line in enumerate(lines):
-        if line.strip()=="- sources-final":
+        if line.strip()==token:
             indent=line[:len(line)-len(line.lstrip())]
-            lines[i+1:i+1]=[indent+"- contextualprocess@flexpackages"]
-            break
+            lines[i:i]=[indent+e for e in entries]
+            return True
+    return False
 
-if not any("shellprocess@flexpostinstall" in x for x in lines):
-    for i,line in enumerate(lines):
-        if line.strip()=="- umount":
-            indent=line[:len(line)-len(line.lstrip())]
-            lines[i:i]=[indent+"- shellprocess@flexpostinstall"]
-            break
+if not insert_after("- keyboard", ["- packagechooser@desktop","- packagechooserq@hyprdots"]):
+    insert_before("- partition", ["- packagechooser@desktop","- packagechooserq@hyprdots"])
+insert_after("- partition", ["- packagechooser@packageprofile"])
+insert_after("- sources-final", [
+    "- contextualprocess@flexdesktop",
+    "- contextualprocess@flexpackages",
+    "- contextualprocess@flexhyprdots",
+])
+insert_before("- umount", ["- shellprocess@flexpostinstall"])
 
 p.write_text("\n".join(lines).rstrip()+"\n")
 PY
@@ -143,4 +131,5 @@ rm -f /usr/share/applications/calamares-install-debian.desktop
 chmod 0755 /usr/bin/flexos-installer /usr/bin/flex /usr/bin/flex-center /usr/bin/flex-welcome /usr/bin/flex-system-report /usr/bin/flex-self-update /usr/bin/flex-beta-check
 chmod 0755 /usr/lib/flexos/flex-postinstall /usr/lib/flexos/flex-recovery-console /usr/lib/flexos/flex-admin /usr/lib/flexos/flexsuite.py
 chmod 0755 /usr/lib/flexos/flexos-first-login /usr/lib/flexos/flex-profile-apply /usr/lib/flexos/flex-package-profile-install
+chmod 0755 /usr/lib/flexos/flex-desktop-install /usr/lib/flexos/flex-hyprdots-install
 chmod 0755 /etc/grub.d/41_flexos_recovery

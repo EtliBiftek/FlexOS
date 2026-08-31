@@ -1,17 +1,92 @@
 #!/usr/bin/env python3
-import os, sys
+from __future__ import annotations
+import os, subprocess, sys
 from pathlib import Path
 
 if os.geteuid() != 0:
-    print("root required", file=sys.stderr)
-    raise SystemExit(1)
+    raise SystemExit("flex-desktop-install must run as root")
 
-name = sys.argv[1] if len(sys.argv) > 1 else "kde"
-if name != "kde":
-    print("FlexOS supports KDE Plasma only.", file=sys.stderr)
-    raise SystemExit(2)
+desktop = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower()
+target_user = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+if desktop not in {"kde", "gnome", "hyprland"}:
+    raise SystemExit(f"Unsupported desktop profile: {desktop or 'missing'}")
 
-Path("/etc/flexos").mkdir(parents=True, exist_ok=True)
-Path("/etc/flexos/desktop-profile").write_text("kde\n", encoding="utf-8")
-Path("/etc/flexos/desktop-profile-status").write_text("installed\n", encoding="utf-8")
-print("KDE Plasma is the active FlexOS desktop.")
+state = Path("/etc/flexos")
+state.mkdir(parents=True, exist_ok=True)
+status = state / "desktop-profile-status"
+status.write_text("installing\n", encoding="utf-8")
+
+def run(cmd, timeout=7200, env=None):
+    print("+", " ".join(cmd), flush=True)
+    merged = os.environ.copy()
+    merged["DEBIAN_FRONTEND"] = "noninteractive"
+    if env:
+        merged.update(env)
+    subprocess.run(cmd, check=True, env=merged, timeout=timeout)
+
+def backports():
+    src = Path("/etc/apt/sources.list.d/flexos-backports.sources")
+    src.write_text(
+        "Types: deb\n"
+        "URIs: https://deb.debian.org/debian\n"
+        "Suites: trixie-backports\n"
+        "Components: main contrib non-free non-free-firmware\n"
+        "Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg\n",
+        encoding="utf-8",
+    )
+
+def disable(unit):
+    subprocess.run(["systemctl", "disable", unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def enable(unit):
+    subprocess.run(["systemctl", "enable", unit], check=False)
+
+plasma_core = [
+    "plasma-desktop", "plasma-workspace", "kwin-wayland", "kwin-x11",
+    "plasma-integration", "powerdevil", "systemsettings", "kinfocenter",
+    "plasma-systemmonitor", "plasma-nm", "bluedevil", "plasma-pa",
+    "xdg-desktop-portal-kde",
+]
+
+run(["apt-get", "update"], timeout=1200)
+
+if desktop == "kde":
+    run(["apt-get", "install", "-y",
+         "plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm",
+         "systemsettings", "xdg-desktop-portal-kde"])
+    disable("gdm3.service")
+    enable("sddm.service")
+
+elif desktop == "gnome":
+    subprocess.run(
+        ["debconf-set-selections"],
+        input="gdm3 shared/default-x-display-manager select gdm3\n",
+        text=True,
+        check=False,
+    )
+    run(["apt-get", "install", "-y", "task-gnome-desktop", "gdm3"])
+    disable("sddm.service")
+    enable("gdm3.service")
+    run(["apt-get", "purge", "-y", "sddm", "sddm-theme-breeze", *plasma_core])
+    run(["apt-get", "autoremove", "-y"], timeout=1800)
+
+elif desktop == "hyprland":
+    backports()
+    run(["apt-get", "update"], timeout=1200)
+    run(["apt-get", "install", "-y", "-t", "trixie-backports",
+         "hyprland", "quickshell", "xdg-desktop-portal-hyprland"])
+    helpers = [
+        "sddm", "network-manager", "pipewire", "wireplumber", "foot", "wofi",
+        "grim", "slurp", "swaybg", "swayidle", "swaylock", "wl-clipboard",
+        "brightnessctl", "playerctl", "jq", "git", "curl", "rsync", "unzip",
+        "gnome-keyring", "fish", "nix-bin", "nix-setup-systemd",
+    ]
+    run(["apt-get", "install", "-y", *helpers])
+    disable("gdm3.service")
+    enable("sddm.service")
+    run(["apt-get", "purge", "-y", *plasma_core])
+    run(["apt-get", "autoremove", "-y"], timeout=1800)
+
+(state / "desktop-profile").write_text(desktop + "\n", encoding="utf-8")
+status.write_text("installed\n", encoding="utf-8")
+print(f"FlexOS desktop profile installed: {desktop} (user={target_user or 'unknown'})")

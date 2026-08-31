@@ -3,6 +3,24 @@
     "name": "KDE Plasma",
     "status": "native-offline",
     "packages": [],
-    "description": "FlexOS'un tek resmi masaüstü ortamı."
+    "description": "FlexOS varsayılan masaüstü. Live ortam ve çevrimdışı kurulum KDE Plasma ile gelir."
+  },
+  "gnome": {
+    "name": "GNOME",
+    "status": "network-install",
+    "packages": [
+      "task-gnome-desktop"
+    ],
+    "description": "Debian 13 GNOME masaüstü. Kurulum sırasında internet bağlantısı gerekir."
+  },
+  "hyprland": {
+    "name": "Hyprland",
+    "status": "backports-network-install",
+    "packages": [
+      "hyprland",
+      "quickshell",
+      "xdg-desktop-portal-hyprland"
+    ],
+    "description": "Trixie Backports üzerinden kurulan Hyprland masaüstü. İsteğe bağlı end4-pC dots desteği vardır."
   }
 }
