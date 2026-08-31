@@ -1,155 +1,831 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, os, shlex, shutil, subprocess, sys
+
+import argparse
+import json
+import shlex
+import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
+
 from PyQt6.QtCore import QProcess, Qt
-from PyQt6.QtWidgets import (QApplication,QComboBox,QDialog,QFileDialog,QFormLayout,QHBoxLayout,QInputDialog,QLabel,QListWidget,QMainWindow,QMessageBox,QPlainTextEdit,QPushButton,QScrollArea,QStackedWidget,QVBoxLayout,QWidget)
+from PyQt6.QtGui import QKeySequence, QShortcut, QTextCursor
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QScrollArea,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-sys.path.insert(0,'/usr/lib/flexos')
+sys.path.insert(0, "/usr/lib/flexos")
+from flexui import action_grid, apply_theme, button, card, icon, label
+
 try:
-    from flexcachy import scx_status,ananicy_status,gaming_status,repo_status,secureboot_status,handheld_status
+    from flexcachy import (
+        ananicy_status,
+        gaming_status,
+        handheld_status,
+        repo_status,
+        scx_status,
+        secureboot_status,
+    )
 except Exception:
-    scx_status=lambda:'unavailable';ananicy_status=lambda:'unavailable';gaming_status=lambda:'unavailable';repo_status=lambda:'unavailable';secureboot_status=lambda:'unavailable';handheld_status=lambda:'none'
+    scx_status = lambda: "unavailable"
+    ananicy_status = lambda: "unavailable"
+    gaming_status = lambda: "unavailable"
+    repo_status = lambda: "unavailable"
+    secureboot_status = lambda: "unavailable"
+    handheld_status = lambda: "none"
 
-ADMIN='/usr/lib/flexos/flex-admin'
+ADMIN = "/usr/lib/flexos/flex-admin"
+_CAPTURE_CACHE: dict[tuple[str, ...], tuple[float, str]] = {}
 
-def capture(cmd,timeout=12):
+
+def capture(cmd, timeout=6, ttl=10, fresh=False):
+    key = tuple(str(part) for part in cmd)
+    now = time.monotonic()
+    if not fresh and key in _CAPTURE_CACHE:
+        when, value = _CAPTURE_CACHE[key]
+        if now - when < ttl:
+            return value
     try:
-        p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=timeout)
-        return (p.stdout or '').strip()
-    except Exception as e:return str(e)
-def title(text):
-    l=QLabel(text);l.setObjectName('title');return l
-def section(text):
-    l=QLabel(text);l.setObjectName('section');return l
-def info(text):
-    l=QLabel(text or '—');l.setWordWrap(True);l.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);return l
-def button(text,fn):
-    b=QPushButton(text);b.clicked.connect(fn);return b
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+        value = (proc.stdout or "").strip()
+    except subprocess.TimeoutExpired:
+        value = "İşlem zaman aşımına uğradı. Sayfayı yenileyerek tekrar deneyin."
+    except Exception as exc:
+        value = str(exc)
+    _CAPTURE_CACHE[key] = (now, value)
+    return value
 
-def box_page(name,body,buttons=None):
-    w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title(name));v.addWidget(info(body));
-    if buttons:
-        row=QHBoxLayout()
-        for text,fn in buttons:row.addWidget(button(text,fn))
-        row.addStretch();v.addLayout(row)
-    v.addStretch();return w
+
+def info(text):
+    item = label(text or "—", "caption")
+    item.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    return item
+
+
+def page_header(layout, title_text, subtitle):
+    layout.addWidget(label("FLEXOS CONTROL CENTER", "eyebrow"))
+    layout.addWidget(label(title_text, "title"))
+    layout.addWidget(label(subtitle, "subtitle"))
+    layout.addSpacing(6)
+
+
+def standard_page(title_text, subtitle, body=None, actions=None):
+    widget = QWidget()
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(34, 28, 34, 34)
+    layout.setSpacing(14)
+    page_header(layout, title_text, subtitle)
+    if body is not None:
+        panel, panel_layout = card()
+        panel_layout.addWidget(info(body))
+        layout.addWidget(panel)
+    if actions:
+        layout.addWidget(action_grid(actions))
+    layout.addStretch()
+    return widget
+
 
 class Task(QDialog):
-    def __init__(self,parent,cmd,label):
-        super().__init__(parent);self.setWindowTitle(label);self.resize(760,480)
-        v=QVBoxLayout(self);v.addWidget(QLabel(' '.join(shlex.quote(x) for x in cmd)))
-        self.log=QPlainTextEdit();self.log.setReadOnly(True);v.addWidget(self.log,1)
-        self.closeb=QPushButton('Kapat');self.closeb.setEnabled(False);self.closeb.clicked.connect(self.accept);v.addWidget(self.closeb)
-        self.p=QProcess(self);self.p.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.p.readyReadStandardOutput.connect(self.read);self.p.finished.connect(self.done)
-        self.p.start(cmd[0],cmd[1:])
-    def read(self):self.log.appendPlainText(bytes(self.p.readAllStandardOutput()).decode(errors='replace').rstrip())
-    def done(self,code,_):self.read();self.log.appendPlainText(f'\nExit: {code}');self.closeb.setEnabled(True)
+    def __init__(self, parent, cmd, title_text):
+        super().__init__(parent)
+        self.setWindowTitle(title_text)
+        self.resize(800, 520)
+        self.setMinimumSize(620, 400)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(12)
+        layout.addWidget(label("FLEXOS TASK", "eyebrow"))
+        layout.addWidget(label(title_text, "hero"))
+
+        command_card, command_layout = card("Çalıştırılan komut", soft=True)
+        command = QLabel(" ".join(shlex.quote(str(part)) for part in cmd))
+        command.setObjectName("caption")
+        command.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        command.setWordWrap(True)
+        command_layout.addWidget(command)
+        layout.addWidget(command_card)
+
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        self.progress.setTextVisible(False)
+        layout.addWidget(self.progress)
+
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setPlaceholderText("İşlem çıktısı burada görünecek…")
+        layout.addWidget(self.log, 1)
+
+        footer = QHBoxLayout()
+        self.status = label("Çalışıyor…", "muted")
+        footer.addWidget(self.status)
+        footer.addStretch()
+        self.close_button = button("Kapat", self.accept, "primary")
+        self.close_button.setEnabled(False)
+        footer.addWidget(self.close_button)
+        layout.addLayout(footer)
+
+        self.process = QProcess(self)
+        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.process.readyReadStandardOutput.connect(self.read_output)
+        self.process.finished.connect(self.finished)
+        self.process.start(cmd[0], [str(part) for part in cmd[1:]])
+
+    def read_output(self):
+        text = bytes(self.process.readAllStandardOutput()).decode(errors="replace")
+        if text:
+            self.log.moveCursor(QTextCursor.MoveOperation.End)
+            self.log.insertPlainText(text)
+            self.log.ensureCursorVisible()
+
+    def finished(self, code, _status):
+        self.read_output()
+        self.progress.setRange(0, 1)
+        self.progress.setValue(1)
+        if code == 0:
+            self.status.setText("Tamamlandı")
+            self.status.setStyleSheet("color:#54d6a0")
+        else:
+            self.status.setText(f"Başarısız · çıkış kodu {code}")
+            self.status.setStyleSheet("color:#ff6b7a")
+        self.close_button.setEnabled(True)
+
 
 class Center(QMainWindow):
-    names=['Genel Bakış','Güncellemeler','Sürücüler','Snapshot','Performans','Gaming','Paket Profilleri','Uygulamalar','Temizlik','Boot & Kernel','Recovery','Loglar','Backup & Sync','Gizlilik','Güvenlik','Donanım','Beta QA','Hakkında']
-    def __init__(self):
-        super().__init__();self.setWindowTitle('Flex Center');self.resize(1120,760)
-        root=QWidget();self.setCentralWidget(root);h=QHBoxLayout(root);h.setContentsMargins(0,0,0,0);h.setSpacing(0)
-        self.nav=QListWidget();self.nav.setFixedWidth(220);self.nav.addItems(self.names);h.addWidget(self.nav)
-        self.stack=QStackedWidget();h.addWidget(self.stack,1)
-        self.builders=[self.overview,self.updates,self.drivers,self.snapshots,self.performance,self.gaming,self.package_profiles,self.apps,self.cleanup,self.boot,self.recovery,self.logs,self.backup,self.privacy,self.security,self.hardware,self.beta,self.about]
-        for f in self.builders:self.stack.addWidget(self.wrap(f()))
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex);self.nav.setCurrentRow(0)
-        self.setStyleSheet('''
-          QMainWindow,QWidget{background:#111216;color:#e8e9ee;font-size:14px} QListWidget{background:#0b0c0f;border:0;padding:14px 8px} QListWidget::item{padding:11px 13px;border-radius:8px;margin:2px} QListWidget::item:selected{background:#272a32;color:white} QLabel#title{font-size:27px;font-weight:700;padding-bottom:10px} QLabel#section{font-size:17px;font-weight:650;padding-top:12px} QPushButton{background:#262932;border:1px solid #383c48;padding:9px 13px;border-radius:7px} QPushButton:hover{background:#303440} QPlainTextEdit,QComboBox{background:#17191f;border:1px solid #353945;border-radius:6px;padding:7px} QScrollArea{border:0}''')
-    def wrap(self,w):
-        s=QScrollArea();s.setWidgetResizable(True);s.setWidget(w);return s
-    def task(self,cmd,label='FlexOS işlemi'):Task(self,cmd,label).exec()
-    def root_tool(self,name,*args):self.task(['pkexec',f'/usr/bin/{name}',*map(str,args)],name)
-    def admin(self,*args):self.task(['pkexec',ADMIN,*map(str,args)],'FlexOS yönetici işlemi')
-    def user_tool(self,name,*args):self.task([f'/usr/bin/{name}',*map(str,args)],name)
-    def command_text(self,cmd):return capture(cmd)
+    pages = [
+        ("overview", "Genel Bakış", "view-dashboard", "Sistem durumu ve hızlı işlemler"),
+        ("updates", "Güncellemeler", "system-software-update", "Paketler, mirror ve depolar"),
+        ("drivers", "Sürücüler", "preferences-system", "GPU, firmware ve Mesa"),
+        ("snapshots", "Snapshot", "document-save", "Btrfs geri dönüş noktaları"),
+        ("performance", "Performans", "speedometer", "Scheduler, Ananicy ve bellek"),
+        ("gaming", "Gaming", "applications-games", "Oyun araçları ve Proton"),
+        ("profiles", "Paket Profilleri", "view-list-details", "Hazır kullanım profilleri"),
+        ("apps", "Uygulamalar", "system-software-install", "Önerilen uygulama kataloğu"),
+        ("cleanup", "Temizlik", "edit-clear", "Gereksiz sistem verilerini temizle"),
+        ("boot", "Boot & Kernel", "system-run", "Kernel ve önyükleme yönetimi"),
+        ("recovery", "Recovery", "tools-wizard", "Sistem onarım araçları"),
+        ("logs", "Loglar", "view-list-text", "Tanılama ve hata kayıtları"),
+        ("backup", "Backup & Sync", "document-save-all", "Snapshot ve rapor dışa aktarma"),
+        ("privacy", "Gizlilik", "security-medium", "Yerel veri ve coredump tercihleri"),
+        ("security", "Güvenlik", "security-high", "Secure Boot, firewall ve updates"),
+        ("hardware", "Donanım", "computer", "Algılanan cihazlar ve handheld profili"),
+        ("beta", "Beta QA", "tools-report-bug", "FlexOS doğrulama araçları"),
+        ("about", "Hakkında", "help-about", "Sürüm ve proje bilgisi"),
+    ]
+
+    def __init__(self, start_page="overview"):
+        super().__init__()
+        self.setWindowTitle("Flex Center")
+        self.resize(1180, 790)
+        self.setMinimumSize(900, 620)
+
+        self.builders = [
+            self.overview,
+            self.updates,
+            self.drivers,
+            self.snapshots,
+            self.performance,
+            self.gaming,
+            self.package_profiles,
+            self.apps,
+            self.cleanup,
+            self.boot,
+            self.recovery,
+            self.logs,
+            self.backup,
+            self.privacy,
+            self.security,
+            self.hardware,
+            self.beta,
+            self.about,
+        ]
+        self.loaded = [False] * len(self.pages)
+
+        root = QWidget()
+        root.setObjectName("appRoot")
+        self.setCentralWidget(root)
+        outer = QHBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(260)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(16, 20, 16, 16)
+        side.setSpacing(10)
+
+        brand_row = QHBoxLayout()
+        mark = QLabel("F")
+        mark.setFixedSize(36, 36)
+        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mark.setStyleSheet(
+            "background:#7c83ff;color:white;border-radius:10px;font-size:19px;font-weight:800"
+        )
+        brand_row.addWidget(mark)
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(0)
+        brand_text.addWidget(label("FlexOS", "brand", False))
+        brand_text.addWidget(label("System Control", "caption", False))
+        brand_row.addLayout(brand_text, 1)
+        side.addLayout(brand_row)
+        side.addSpacing(4)
+
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Ara…  Ctrl+K")
+        themed = icon("edit-find")
+        if not themed.isNull():
+            self.search.addAction(themed, QLineEdit.ActionPosition.LeadingPosition)
+        self.search.textChanged.connect(self.filter_navigation)
+        side.addWidget(self.search)
+
+        self.nav = QListWidget()
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav.setSpacing(1)
+        for index, (key, name, icon_name, _subtitle) in enumerate(self.pages):
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            themed = icon(icon_name)
+            if not themed.isNull():
+                item.setIcon(themed)
+            item.setToolTip(_subtitle)
+            self.nav.addItem(item)
+        self.nav.currentItemChanged.connect(self.navigation_changed)
+        side.addWidget(self.nav, 1)
+
+        footer_card, footer_layout = card(soft=True)
+        footer_layout.setContentsMargins(12, 10, 12, 10)
+        footer_layout.addWidget(label("FlexOS Beta", "section"))
+        footer_layout.addWidget(label("Debian 13 · CachyOS-derived stack", "caption"))
+        side.addWidget(footer_card)
+        outer.addWidget(sidebar)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        self.stack = QStackedWidget()
+        for _ in self.pages:
+            self.stack.addWidget(QWidget())
+        content_layout.addWidget(self.stack)
+        outer.addWidget(content, 1)
+
+        self.search_shortcut=QShortcut(QKeySequence("Ctrl+K"),self)
+        self.search_shortcut.activated.connect(self.search.setFocus)
+        self.reload_shortcut=QShortcut(QKeySequence("Ctrl+R"),self)
+        self.reload_shortcut.activated.connect(self.reload_current)
+
+        requested = next(
+            (i for i, page in enumerate(self.pages) if page[0] == start_page), 0
+        )
+        self.nav.setCurrentRow(requested)
+
+    def filter_navigation(self, text):
+        query = text.strip().casefold()
+        visible = []
+        for row in range(self.nav.count()):
+            item = self.nav.item(row)
+            index = item.data(Qt.ItemDataRole.UserRole)
+            _, name, _, subtitle = self.pages[index]
+            matches = not query or query in name.casefold() or query in subtitle.casefold()
+            item.setHidden(not matches)
+            if matches:
+                visible.append(row)
+        current = self.nav.currentItem()
+        if visible and (current is None or current.isHidden()):
+            self.nav.setCurrentRow(visible[0])
+
+    def navigation_changed(self, current, _previous):
+        if current is None:
+            return
+        index = current.data(Qt.ItemDataRole.UserRole)
+        self.show_page(index)
+
+    def wrap(self, widget):
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(widget)
+        return area
+
+    def show_page(self, index):
+        if index < 0 or index >= len(self.pages):
+            return
+        if not self.loaded[index]:
+            placeholder = self.stack.widget(index)
+            page = self.wrap(self.builders[index]())
+            self.stack.removeWidget(placeholder)
+            placeholder.deleteLater()
+            self.stack.insertWidget(index, page)
+            self.loaded[index] = True
+        self.stack.setCurrentIndex(index)
+
+    def reload_current(self):
+        item = self.nav.currentItem()
+        if item is None:
+            return
+        index = item.data(Qt.ItemDataRole.UserRole)
+        _CAPTURE_CACHE.clear()
+        if self.loaded[index]:
+            old = self.stack.widget(index)
+            self.stack.removeWidget(old)
+            old.deleteLater()
+            self.stack.insertWidget(index, QWidget())
+            self.loaded[index] = False
+        self.show_page(index)
+
+    def task(self, cmd, title_text="FlexOS işlemi"):
+        Task(self, cmd, title_text).exec()
+        _CAPTURE_CACHE.clear()
+        self.reload_current()
+
+    def root_tool(self, name, *args):
+        self.task(["pkexec", f"/usr/bin/{name}", *map(str, args)], name)
+
+    def admin(self, *args):
+        self.task(["pkexec", ADMIN, *map(str, args)], "FlexOS yönetici işlemi")
+
+    def user_tool(self, name, *args):
+        self.task([f"/usr/bin/{name}", *map(str, args)], name)
+
+    def launch_tool(self, name, *args):
+        QProcess.startDetached(f"/usr/bin/{name}", [str(arg) for arg in args])
+
     def overview(self):
-        body='\n'.join([capture(['flexos-info']) or 'FlexOS',f"Kernel: {capture(['uname','-r'])}",capture(['bash','-lc',"free -h | sed -n '1,2p'"]),capture(['df','-h','/'])])
-        return box_page('Flex Center',body,[('Sistem raporu',lambda:self.user_tool('flex-system-report')),('Kernel bilgisi',lambda:self.user_tool('flex-kernel-info'))])
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Genel Bakış", "Sistemin önemli durumlarını tek ekranda görün.")
+
+        identity = capture(["flexos-info"], timeout=3) or "FlexOS"
+        kernel = capture(["uname", "-r"], timeout=2)
+        memory = capture(["bash", "-lc", "free -h | sed -n '2p'"], timeout=2)
+        disk = capture(["df", "-h", "/"], timeout=2)
+
+        summary, summary_layout = card("Sistem")
+        summary_layout.addWidget(info(f"{identity}\n\nKernel: {kernel}"))
+        layout.addWidget(summary)
+
+        resource_row = QHBoxLayout()
+        memory_card, memory_layout = card("Bellek", soft=True)
+        memory_layout.addWidget(info(memory))
+        disk_card, disk_layout = card("Disk /", soft=True)
+        disk_layout.addWidget(info(disk))
+        resource_row.addWidget(memory_card, 1)
+        resource_row.addWidget(disk_card, 1)
+        layout.addLayout(resource_row)
+
+        layout.addWidget(
+            action_grid(
+                [
+                    ("Sistem raporu", lambda: self.launch_tool("flex-system-report"), "primary", "document-save"),
+                    ("Kernel bilgisi", lambda: self.user_tool("flex-kernel-info"), None, "system-run"),
+                ]
+            )
+        )
+        layout.addStretch()
+        return widget
+
     def updates(self):
-        w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title('Güncellemeler & Depolar'))
-        apt=capture(['bash','-lc',"apt list --upgradable 2>/dev/null | tail -n +2 | head -n 30"]);v.addWidget(info(apt or 'Güncel paket listesi için APT yenile.'))
-        v.addWidget(section('Mirror'));v.addWidget(info(capture(['flex-mirror','status'])));v.addWidget(section('Optimize repo'));v.addWidget(info(repo_status()))
-        for text,fn in [('APT yenile',lambda:self.admin('update','refresh')),('Sistemi güncelle',lambda:self.admin('update','install')),('En hızlı Debian mirror',lambda:self.root_tool('flex-mirror','apply')),('Optimize repo: Auto',lambda:self.root_tool('flex-repo','auto')),('Baseline repo',lambda:self.root_tool('flex-repo','select','baseline'))]:v.addWidget(button(text,fn))
-        v.addStretch();return w
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Güncellemeler", "APT, mirror ve FlexOS optimize depolarını yönetin.")
+
+        apt = capture(
+            ["bash", "-lc", "apt list --upgradable 2>/dev/null | tail -n +2 | head -n 30"],
+            timeout=5,
+        )
+        panel, panel_layout = card("Bekleyen paket güncellemeleri")
+        panel_layout.addWidget(info(apt or "Bekleyen güncelleme görünmüyor. Paket indeksini yenileyebilirsiniz."))
+        layout.addWidget(panel)
+
+        status_row = QHBoxLayout()
+        mirror, mirror_layout = card("Mirror", soft=True)
+        mirror_layout.addWidget(info(capture(["flex-mirror", "status"], timeout=4)))
+        repo, repo_layout = card("Optimize repo", soft=True)
+        repo_layout.addWidget(info(repo_status()))
+        status_row.addWidget(mirror, 1)
+        status_row.addWidget(repo, 1)
+        layout.addLayout(status_row)
+
+        layout.addWidget(
+            action_grid(
+                [
+                    ("APT indeksini yenile", lambda: self.admin("update", "refresh"), None, "view-refresh"),
+                    ("Sistemi güncelle", lambda: self.admin("update", "install"), "primary", "system-software-update"),
+                    ("En hızlı Debian mirror", lambda: self.root_tool("flex-mirror", "apply"), None, "network-server"),
+                    ("Optimize repo · Auto", lambda: self.root_tool("flex-repo", "auto"), None, "preferences-system"),
+                    ("Baseline repo", lambda: self.root_tool("flex-repo", "select", "baseline"), None, "document-revert"),
+                ]
+            )
+        )
+        layout.addStretch()
+        return widget
+
     def drivers(self):
-        body=capture(['flex-hwd'])
-        return box_page('Sürücüler',body,[('Güvenli firmware/Mesa uygula',lambda:self.root_tool('flex-hwd','--apply-safe')),('NVIDIA Proprietary',lambda:self.root_tool('flex-hwd','--nvidia','proprietary')),('NVIDIA Open',lambda:self.root_tool('flex-hwd','--nvidia','open')),('Nouveau',lambda:self.root_tool('flex-hwd','--nvidia','nouveau'))])
+        return standard_page(
+            "Sürücüler",
+            "Donanıma uygun firmware, Mesa ve NVIDIA sürücülerini yönetin.",
+            capture(["flex-hwd"], timeout=5),
+            [
+                ("Güvenli firmware / Mesa uygula", lambda: self.root_tool("flex-hwd", "--apply-safe"), "primary", "dialog-ok"),
+                ("NVIDIA Proprietary", lambda: self.root_tool("flex-hwd", "--nvidia", "proprietary"), None, "video-display"),
+                ("NVIDIA Open", lambda: self.root_tool("flex-hwd", "--nvidia", "open"), None, "video-display"),
+                ("Nouveau", lambda: self.root_tool("flex-hwd", "--nvidia", "nouveau"), None, "video-display"),
+            ],
+        )
+
     def snapshots(self):
-        body=capture(['snapper','-c','root','list']) if shutil.which('snapper') else 'Snapper yok.'
-        def create():
-            d,ok=QInputDialog.getText(self,'Snapshot','Açıklama:');
-            if ok:self.admin('snapshot','create',d or 'FlexOS manual snapshot')
-        def delete():
-            n,ok=QInputDialog.getText(self,'Snapshot sil','Snapshot numarası:');
-            if ok and n.isdigit():self.admin('snapshot','delete',n)
-        def rollback():
-            n,ok=QInputDialog.getText(self,'Rollback','Snapshot numarası:');
-            if ok and n.isdigit() and QMessageBox.question(self,'Onay','Rollback hazırlanacak ve yeniden başlatma gerekecek. Devam?')==QMessageBox.StandardButton.Yes:self.admin('snapshot','rollback',n)
-        return box_page('Snapshot',body,[('Kurulumu hazırla',lambda:self.admin('snapshot','setup')),('Yeni snapshot',create),('Sil',delete),('Rollback',rollback)])
+        body = capture(["snapper", "-c", "root", "list"], timeout=5) if shutil.which("snapper") else "Snapper kurulu değil."
+
+        def create_snapshot():
+            description, ok = QInputDialog.getText(self, "Snapshot", "Açıklama:")
+            if ok:
+                self.admin("snapshot", "create", description or "FlexOS manual snapshot")
+
+        def delete_snapshot():
+            number, ok = QInputDialog.getText(self, "Snapshot sil", "Snapshot numarası:")
+            if ok and number.isdigit():
+                self.admin("snapshot", "delete", number)
+
+        def rollback_snapshot():
+            number, ok = QInputDialog.getText(self, "Rollback", "Snapshot numarası:")
+            if not (ok and number.isdigit()):
+                return
+            answer = QMessageBox.question(
+                self,
+                "Rollback onayı",
+                "Seçilen snapshot geri dönüş için hazırlanacak ve yeniden başlatma gerekecek. Devam edilsin mi?",
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self.admin("snapshot", "rollback", number)
+
+        return standard_page(
+            "Snapshot",
+            "Btrfs geri dönüş noktalarını oluşturun, silin veya rollback hazırlayın.",
+            body,
+            [
+                ("Snapshot altyapısını hazırla", lambda: self.admin("snapshot", "setup"), None, "preferences-system"),
+                ("Yeni snapshot", create_snapshot, "primary", "list-add"),
+                ("Snapshot sil", delete_snapshot, "danger", "edit-delete"),
+                ("Rollback", rollback_snapshot, None, "document-revert"),
+            ],
+        )
+
     def performance(self):
-        w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title('Performans'))
-        v.addWidget(info(capture(['flex-kernel-info'])));v.addWidget(section('SCX sched_ext'));v.addWidget(info(scx_status()))
-        row=QHBoxLayout();sched=QComboBox();sched.addItems(['scx_lavd','scx_bpfland','scx_rusty','scx_flash','scx_cosmos','scx_cake']);mode=QComboBox();mode.addItems(['Auto','Gaming','LowLatency','PowerSave','Server']);row.addWidget(sched);row.addWidget(mode);row.addWidget(button('Uygula',lambda:self.root_tool('flex-scx','set',sched.currentText(),mode.currentText())));v.addLayout(row)
-        for text,fn in [('SCX userspace kur',lambda:self.root_tool('flex-scx','install')),('SCX kapat',lambda:self.root_tool('flex-scx','disable'))]:v.addWidget(button(text,fn))
-        v.addWidget(section('Ananicy'));v.addWidget(info(ananicy_status()))
-        r=QHBoxLayout();
-        for text,args in [('Kur',['install']),('Etkinleştir',['enable']),('Kapat',['disable']),('Kuralları güncelle',['update-rules'])]:r.addWidget(button(text,lambda _=False,a=args:self.root_tool('flex-ananicy',*a)))
-        v.addLayout(r);v.addWidget(section('Bellek'))
-        r=QHBoxLayout();r.addWidget(button('zRAM aç',lambda:self.root_tool('flex-performance-config','zram','on')));r.addWidget(button('zRAM kapat',lambda:self.root_tool('flex-performance-config','zram','off')))
-        def swap():
-            n,ok=QInputDialog.getInt(self,'Swappiness','Değer:',100,1,200)
-            if ok:self.root_tool('flex-performance-config','swappiness',str(n))
-        r.addWidget(button('Swappiness',swap));v.addLayout(r);v.addStretch();return w
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Performans", "Scheduler, süreç öncelikleri ve bellek davranışını tek noktadan ayarlayın.")
+
+        kernel, kernel_layout = card("Kernel & scheduler")
+        kernel_layout.addWidget(info(capture(["flex-kernel-info"], timeout=4)))
+        kernel_layout.addWidget(label(f"SCX durumu: {scx_status()}", "caption"))
+        controls = QHBoxLayout()
+        sched = QComboBox()
+        sched.addItems(["scx_lavd", "scx_bpfland", "scx_rusty", "scx_flash", "scx_cosmos", "scx_cake"])
+        mode = QComboBox()
+        mode.addItems(["Auto", "Gaming", "LowLatency", "PowerSave", "Server"])
+        controls.addWidget(sched, 1)
+        controls.addWidget(mode, 1)
+        controls.addWidget(button("Uygula", lambda: self.root_tool("flex-scx", "set", sched.currentText(), mode.currentText()), "primary"))
+        kernel_layout.addLayout(controls)
+        kernel_layout.addWidget(
+            action_grid(
+                [
+                    ("SCX userspace kur", lambda: self.root_tool("flex-scx", "install")),
+                    ("SCX kapat", lambda: self.root_tool("flex-scx", "disable"), "danger"),
+                ]
+            )
+        )
+        layout.addWidget(kernel)
+
+        ananicy, ananicy_layout = card("Ananicy", soft=True)
+        ananicy_layout.addWidget(info(ananicy_status()))
+        ananicy_layout.addWidget(
+            action_grid(
+                [
+                    ("Kur", lambda: self.root_tool("flex-ananicy", "install")),
+                    ("Etkinleştir", lambda: self.root_tool("flex-ananicy", "enable"), "primary"),
+                    ("Kapat", lambda: self.root_tool("flex-ananicy", "disable"), "danger"),
+                    ("Kuralları güncelle", lambda: self.root_tool("flex-ananicy", "update-rules")),
+                ]
+            )
+        )
+        layout.addWidget(ananicy)
+
+        memory, memory_layout = card("Bellek", soft=True)
+
+        def swappiness():
+            number, ok = QInputDialog.getInt(self, "Swappiness", "Değer:", 100, 1, 200)
+            if ok:
+                self.root_tool("flex-performance-config", "swappiness", str(number))
+
+        memory_layout.addWidget(
+            action_grid(
+                [
+                    ("zRAM aç", lambda: self.root_tool("flex-performance-config", "zram", "on"), "primary"),
+                    ("zRAM kapat", lambda: self.root_tool("flex-performance-config", "zram", "off"), "danger"),
+                    ("Swappiness ayarla", swappiness),
+                ]
+            )
+        )
+        layout.addWidget(memory)
+        layout.addStretch()
+        return widget
+
     def gaming(self):
-        w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title('Gaming Stack'));v.addWidget(info(gaming_status()))
-        v.addWidget(QLabel('Steam/umu sistem paketidir; Heroic ve Proton-CachyOS kullanıcı hesabına kurulur. Proton assetleri SHA256 ile doğrulanır.'))
-        for text,fn in [('Core: GameMode + MangoHud + GOverlay + Lutris',lambda:self.root_tool('flex-gaming','install-core')),('Steam + i386 Vulkan',lambda:self.root_tool('flex-gaming','install-steam')),('Gamescope (Trixie Backports)',lambda:self.root_tool('flex-gaming','install-gamescope')),('umu-launcher',lambda:self.root_tool('flex-gaming','install-umu')),('Heroic (Flatpak)',lambda:self.user_tool('flex-gaming','install-heroic')),('Proton-CachyOS',lambda:self.user_tool('flex-gaming','install-proton-cachyos'))]:v.addWidget(button(text,fn))
-        v.addStretch();return w
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Gaming", "Oyun runtime'ları ve performans araçlarını modüler biçimde kurun.")
+        status, status_layout = card("Gaming stack")
+        status_layout.addWidget(info(gaming_status()))
+        status_layout.addWidget(label("Steam ve umu sistem paketi; Heroic ve Proton-CachyOS kullanıcı hesabına kurulur. Proton assetleri SHA256 ile doğrulanır.", "caption"))
+        layout.addWidget(status)
+        layout.addWidget(
+            action_grid(
+                [
+                    ("GameMode + MangoHud + GOverlay + Lutris", lambda: self.root_tool("flex-gaming", "install-core"), "primary", "applications-games"),
+                    ("Steam + i386 Vulkan", lambda: self.root_tool("flex-gaming", "install-steam"), None, "steam"),
+                    ("Gamescope", lambda: self.root_tool("flex-gaming", "install-gamescope")),
+                    ("umu-launcher", lambda: self.root_tool("flex-gaming", "install-umu")),
+                    ("Heroic · Flatpak", lambda: self.user_tool("flex-gaming", "install-heroic")),
+                    ("Proton-CachyOS", lambda: self.user_tool("flex-gaming", "install-proton-cachyos")),
+                ]
+            )
+        )
+        layout.addStretch()
+        return widget
+
     def package_profiles(self):
-        w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title('Paket Profilleri'))
-        try:d=json.loads(Path('/usr/share/flexos/package-profiles.json').read_text())
-        except Exception:d={}
-        for key,spec in d.items():
-            v.addWidget(section(spec.get('name',key)));v.addWidget(info(spec.get('description','')));v.addWidget(button('Profili uygula',lambda _=False,k=key:self.task(['pkexec','/usr/lib/flexos/flex-package-profile-install',k],f'Paket profili: {k}')))
-        v.addStretch();return w
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Paket Profilleri", "Kullanım amacına göre hazır araç gruplarını kurun.")
+        try:
+            profiles = json.loads(Path("/usr/share/flexos/package-profiles.json").read_text())
+        except Exception:
+            profiles = {}
+        if not profiles:
+            empty, empty_layout = card("Profil bulunamadı")
+            empty_layout.addWidget(label("Paket profili verisi yüklenemedi.", "caption"))
+            layout.addWidget(empty)
+        for key, spec in profiles.items():
+            panel, panel_layout = card(spec.get("name", key), soft=True)
+            panel_layout.addWidget(label(spec.get("description", ""), "caption"))
+            panel_layout.addWidget(
+                button(
+                    "Profili uygula",
+                    lambda _checked=False, profile=key: self.task(
+                        ["pkexec", "/usr/lib/flexos/flex-package-profile-install", profile],
+                        f"Paket profili · {profile}",
+                    ),
+                    "primary",
+                )
+            )
+            layout.addWidget(panel)
+        layout.addStretch()
+        return widget
+
     def apps(self):
-        w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title('Uygulamalar'))
-        try:apps=json.loads(Path('/usr/share/flexos/apps.json').read_text())
-        except Exception:apps=[]
-        for a in apps:
-            v.addWidget(section(a.get('name','App')));v.addWidget(info(a.get('description','')))
-            if a.get('method')=='apt':fn=lambda _=False,p=a['package']:self.admin('app','apt',p)
-            else:fn=lambda _=False,p=a['package']:self.task(['flatpak','install','--user','-y','flathub',p],'Flatpak kurulumu')
-            v.addWidget(button('Kur',fn))
-        v.addStretch();return w
-    def cleanup(self):return box_page('Temizlik','APT autoremove/cache ve eski journal verisini temizler. İşlem öncesi snapshot alınır.',[('Sistem temizliği',lambda:self.admin('cleanup','system'))])
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Uygulamalar", "FlexOS tarafından önerilen uygulamaları APT veya Flatpak ile kurun.")
+        try:
+            apps = json.loads(Path("/usr/share/flexos/apps.json").read_text())
+        except Exception:
+            apps = []
+        if not apps:
+            panel, panel_layout = card("Katalog yüklenemedi")
+            panel_layout.addWidget(label("Uygulama kataloğu bulunamadı.", "caption"))
+            layout.addWidget(panel)
+        for app in apps:
+            panel, panel_layout = card(app.get("name", "Uygulama"), soft=True)
+            panel_layout.addWidget(label(app.get("description", ""), "caption"))
+            if app.get("method") == "apt":
+                install = lambda _checked=False, package=app["package"]: self.admin("app", "apt", package)
+            else:
+                install = lambda _checked=False, package=app["package"]: self.task(
+                    ["flatpak", "install", "--user", "-y", "flathub", package],
+                    "Flatpak kurulumu",
+                )
+            panel_layout.addWidget(button("Kur", install, "primary", "system-software-install"))
+            layout.addWidget(panel)
+        layout.addStretch()
+        return widget
+
+    def cleanup(self):
+        return standard_page(
+            "Temizlik",
+            "Güvenli sistem temizliği öncesinde otomatik snapshot oluşturulur.",
+            "APT autoremove/cache ve eski journal verileri temizlenir. Kişisel dosyalara dokunulmaz.",
+            [("Sistem temizliğini başlat", lambda: self.admin("cleanup", "system"), "primary", "edit-clear")],
+        )
+
     def boot(self):
-        body=capture(['flex-kernel-info'])+'\n\n'+capture(['flex-kernel-manager','status'])
-        return box_page('Boot & Kernel',body,[('CachyOS kerneli güncelle',lambda:self.root_tool('flex-kernel-manager','update-cachy')),('Debian fallback kur/onar',lambda:self.root_tool('flex-kernel-manager','install-fallback')),('Debian backports kernel',lambda:self.admin('kernel','backports')),('GRUB güncelle',lambda:self.admin('repair','grub'))])
-    def recovery(self):return box_page('Recovery','FlexOS recovery target; APT/dpkg, initramfs, GRUB ve ağ onarım araçları.',[('dpkg yapılandır',lambda:self.admin('repair','dpkg')),('Paket bağımlılıklarını onar',lambda:self.admin('repair','packages')),('APT listelerini yenile',lambda:self.admin('repair','apt')),('initramfs yenile',lambda:self.admin('repair','initramfs')),('GRUB yenile',lambda:self.admin('repair','grub')),('NetworkManager yeniden başlat',lambda:self.admin('repair','network'))])
+        body = capture(["flex-kernel-info"], timeout=4) + "\n\n" + capture(["flex-kernel-manager", "status"], timeout=4)
+        return standard_page(
+            "Boot & Kernel",
+            "FlexOS kerneli, Debian fallback ve GRUB durumunu yönetin.",
+            body,
+            [
+                ("CachyOS kerneli güncelle", lambda: self.root_tool("flex-kernel-manager", "update-cachy"), "primary", "system-software-update"),
+                ("Debian fallback kur / onar", lambda: self.root_tool("flex-kernel-manager", "install-fallback")),
+                ("Debian backports kernel", lambda: self.admin("kernel", "backports")),
+                ("GRUB güncelle", lambda: self.admin("repair", "grub"), None, "view-refresh"),
+            ],
+        )
+
+    def recovery(self):
+        return standard_page(
+            "Recovery",
+            "APT, dpkg, initramfs, GRUB ve ağ için güvenli onarım kısayolları.",
+            "Her işlem ayrı çalıştırılır ve çıktısı gösterilir. Kritik değişikliklerde mevcut FlexOS yönetici oturumu yeniden kullanılır.",
+            [
+                ("dpkg yapılandır", lambda: self.admin("repair", "dpkg"), "primary"),
+                ("Paket bağımlılıklarını onar", lambda: self.admin("repair", "packages")),
+                ("APT listelerini yenile", lambda: self.admin("repair", "apt")),
+                ("initramfs yenile", lambda: self.admin("repair", "initramfs")),
+                ("GRUB yenile", lambda: self.admin("repair", "grub")),
+                ("NetworkManager yeniden başlat", lambda: self.admin("repair", "network")),
+            ],
+        )
+
     def logs(self):
-        body='\n'.join([capture(['journalctl','-b','-p','warning','--no-pager','-n','100']),capture(['tail','-n','80','/var/log/flexos-admin.log'])])
-        return box_page('Loglar',body,[('System report oluştur',lambda:self.user_tool('flex-system-report'))])
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Loglar", "Son boot uyarıları ve FlexOS yönetici kayıtlarını inceleyin.")
+        text = "\n".join(
+            [
+                capture(["journalctl", "-b", "-p", "warning", "--no-pager", "-n", "100"], timeout=5),
+                capture(["tail", "-n", "80", "/var/log/flexos-admin.log"], timeout=3),
+            ]
+        )
+        log = QPlainTextEdit()
+        log.setReadOnly(True)
+        log.setPlainText(text or "Gösterilecek kayıt yok.")
+        layout.addWidget(log, 1)
+        layout.addWidget(
+            action_grid(
+                [("Sistem raporu oluştur", lambda: self.launch_tool("flex-system-report"), "primary", "document-save")]
+            )
+        )
+        return widget
+
     def backup(self):
         def report():
-            dst,_=QFileDialog.getSaveFileName(self,'Sistem raporu kaydet',str(Path.home()/'FlexOS-System-Report.zip'),'ZIP (*.zip)')
-            if dst:self.task(['flex-system-report',dst],'Sistem raporu')
-        return box_page('Backup & Sync','Btrfs snapshot + taşınabilir sistem raporu. Kişisel veriler otomatik olarak dışarı gönderilmez.',[('Snapshot oluştur',lambda:self.admin('snapshot','create','Before manual backup')),('Sistem raporunu kaydet',report)])
-    def privacy(self):return box_page('Gizlilik','Coredump ve konum servisleri kullanıcı kontrolündedir.',[('Coredump kapat',lambda:self.admin('security','coredumps','off')),('Coredump aç',lambda:self.admin('security','coredumps','on')),('Konum kapat',lambda:self.admin('security','location','off')),('Konum aç',lambda:self.admin('security','location','on'))])
+            destination, _ = QFileDialog.getSaveFileName(
+                self,
+                "Sistem raporu kaydet",
+                str(Path.home() / "FlexOS-System-Report.zip"),
+                "ZIP (*.zip)",
+            )
+            if destination:
+                self.task(["flex-system-report", destination], "Sistem raporu")
+
+        return standard_page(
+            "Backup & Sync",
+            "Btrfs snapshot ve taşınabilir tanılama raporları oluşturun.",
+            "FlexOS kişisel verileri otomatik olarak dışarı göndermez. Sistem raporu yerel olarak oluşturulur.",
+            [
+                ("Snapshot oluştur", lambda: self.admin("snapshot", "create", "Before manual backup"), "primary", "document-save"),
+                ("Sistem raporunu kaydet", report, None, "document-save-as"),
+            ],
+        )
+
+    def privacy(self):
+        return standard_page(
+            "Gizlilik",
+            "Yerel tanılama ve konum servislerini kullanıcı kontrolünde tutun.",
+            "Coredump ve konum servisleri isteğe bağlıdır. FlexOS kendi telemetri servisini çalıştırmaz.",
+            [
+                ("Coredump kapat", lambda: self.admin("security", "coredumps", "off"), "primary"),
+                ("Coredump aç", lambda: self.admin("security", "coredumps", "on")),
+                ("Konum kapat", lambda: self.admin("security", "location", "off")),
+                ("Konum aç", lambda: self.admin("security", "location", "on")),
+            ],
+        )
+
     def security(self):
-        w=QWidget();v=QVBoxLayout(w);v.setContentsMargins(28,24,28,24);v.addWidget(title('Güvenlik'));v.addWidget(info(secureboot_status()));v.addWidget(section('Secure Boot / MOK'))
-        for text,args in [('MOK anahtarı hazırla',['setup-mok']),('MOK enrollment iste',['enroll']),('FlexOS kernelini imzala',['sign-kernels']),('DKMS modüllerini imzala',['sign-modules'])]:v.addWidget(button(text,lambda _=False,a=args:self.root_tool('flex-secureboot',*a)))
-        v.addWidget(section('Firewall & updates'));r=QHBoxLayout();r.addWidget(button('Firewall aç',lambda:self.admin('security','firewall','on')));r.addWidget(button('Firewall kapat',lambda:self.admin('security','firewall','off')));r.addWidget(button('Otomatik güncelleme aç',lambda:self.admin('security','autoupdates','on')));r.addWidget(button('Kapat',lambda:self.admin('security','autoupdates','off')));v.addLayout(r);v.addStretch();return w
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(34, 28, 34, 34)
+        layout.setSpacing(14)
+        page_header(layout, "Güvenlik", "Secure Boot, firewall ve otomatik güvenlik güncellemelerini yönetin.")
+
+        secure, secure_layout = card("Secure Boot / MOK")
+        secure_layout.addWidget(info(secureboot_status()))
+        secure_layout.addWidget(
+            action_grid(
+                [
+                    ("MOK anahtarı hazırla", lambda: self.root_tool("flex-secureboot", "setup-mok"), "primary"),
+                    ("MOK enrollment iste", lambda: self.root_tool("flex-secureboot", "enroll")),
+                    ("FlexOS kernelini imzala", lambda: self.root_tool("flex-secureboot", "sign-kernels")),
+                    ("DKMS modüllerini imzala", lambda: self.root_tool("flex-secureboot", "sign-modules")),
+                ]
+            )
+        )
+        layout.addWidget(secure)
+
+        firewall, firewall_layout = card("Firewall & updates", soft=True)
+        firewall_layout.addWidget(
+            action_grid(
+                [
+                    ("Firewall aç", lambda: self.admin("security", "firewall", "on"), "primary"),
+                    ("Firewall kapat", lambda: self.admin("security", "firewall", "off"), "danger"),
+                    ("Otomatik güncelleme aç", lambda: self.admin("security", "autoupdates", "on")),
+                    ("Otomatik güncelleme kapat", lambda: self.admin("security", "autoupdates", "off"), "danger"),
+                ]
+            )
+        )
+        layout.addWidget(firewall)
+        layout.addStretch()
+        return widget
+
     def hardware(self):
-        body=capture(['flex-hwd'])+f'\n\nDetected handheld profile: {handheld_status()}'
-        return box_page('Donanım',body,[('Güvenli sürücü/firmware uygula',lambda:self.root_tool('flex-hwd','--apply-safe')),('Handheld profili uygula',lambda:self.root_tool('flex-hwd','--apply-handheld'))])
-    def beta(self):return box_page('Beta QA','FlexOS doğrulama ve beta kontrol araçları.',[('Beta check',lambda:self.user_tool('flex-beta-check')),('Kernel teşhisi',lambda:self.user_tool('flex-kernel-info')),('SCX durumu',lambda:self.user_tool('flex-scx','status'))])
-    def about(self):return box_page('Hakkında',capture(['flexos-info'])+'\n\nFlexOS Debian 13/Trixie userspace + FlexOS CachyOS-derived performance stack. Arch/CachyOS binary repositories are not mixed into APT.')
+        body = capture(["flex-hwd"], timeout=5) + f"\n\nDetected handheld profile: {handheld_status()}"
+        return standard_page(
+            "Donanım",
+            "Algılanan donanım, sürücü önerileri ve handheld profilini görün.",
+            body,
+            [
+                ("Güvenli sürücü / firmware uygula", lambda: self.root_tool("flex-hwd", "--apply-safe"), "primary"),
+                ("Handheld profili uygula", lambda: self.root_tool("flex-hwd", "--apply-handheld")),
+            ],
+        )
+
+    def beta(self):
+        return standard_page(
+            "Beta QA",
+            "FlexOS beta doğrulama ve kernel teşhis araçlarını çalıştırın.",
+            "Bu araçlar sistem durumunu toplar; değişiklik yapan işlemler ayrı yönetici onayı ister.",
+            [
+                ("Beta check", lambda: self.user_tool("flex-beta-check"), "primary", "tools-report-bug"),
+                ("Kernel teşhisi", lambda: self.user_tool("flex-kernel-info")),
+                ("SCX durumu", lambda: self.user_tool("flex-scx", "status")),
+            ],
+        )
+
+    def about(self):
+        body = capture(["flexos-info"], timeout=3)
+        body += "\n\nFlexOS, Debian 13/Trixie userspace üzerinde FlexOS CachyOS-derived performans bileşenleri kullanır. Arch/CachyOS binary depoları APT ile karıştırılmaz."
+        body += "\n\nArayüz: FlexOS UI System · lazy-loaded pages · keyboard-first navigation."
+        return standard_page("Hakkında", "FlexOS sürüm ve mimari özeti.", body)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--page", default="overview")
+    args, _unknown = parser.parse_known_args()
+    return args
+
 
 def main():
-    app=QApplication(sys.argv);app.setApplicationName('Flex Center');w=Center();w.show();sys.exit(app.exec())
-if __name__=='__main__':main()
+    args = parse_args()
+    app = QApplication(sys.argv)
+    app.setApplicationName("Flex Center")
+    app.setOrganizationName("FlexOS")
+    apply_theme(app)
+    window = Center(args.page)
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

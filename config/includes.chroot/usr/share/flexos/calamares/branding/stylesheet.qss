@@ -1,35 +1,37 @@
-/* FlexOS Calamares — monochrome dark installer theme. */
+/* FlexOS Calamares — shared dark UI language for the installer. */
 
 QWidget {
-    background-color: #1b1d20;
-    color: #e8e9ea;
-    font-size: 10pt;
+    background-color: #090c12;
+    color: #eef2f8;
+    font-family: "Noto Sans";
+    font-size: 10.5pt;
 }
 
 QMainWindow,
 QDialog {
-    background-color: #1b1d20;
+    background-color: #090c12;
 }
 
 QLabel {
     background-color: transparent;
-    color: #dedfe1;
+    color: #dfe5ef;
 }
 
 QGroupBox {
-    background-color: #202225;
-    border: 1px solid #34373b;
-    border-radius: 7px;
-    margin-top: 10px;
-    padding: 10px;
+    background-color: #10151e;
+    border: 1px solid #273142;
+    border-radius: 12px;
+    margin-top: 13px;
+    padding: 13px;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 5px;
-    color: #cfd1d4;
-    background-color: #1b1d20;
+    left: 12px;
+    padding: 0 7px;
+    color: #ffffff;
+    background-color: #090c12;
+    font-weight: 600;
 }
 
 QLineEdit,
@@ -44,12 +46,13 @@ QTextEdit,
 QListView,
 QTreeView,
 QTableView {
-    background-color: #232529;
-    color: #f1f2f3;
-    border: 1px solid #3b3e43;
-    border-radius: 5px;
-    padding: 5px 8px;
-    selection-background-color: #555a61;
+    min-height: 26px;
+    background-color: #0d121a;
+    color: #eef2f8;
+    border: 1px solid #273142;
+    border-radius: 9px;
+    padding: 7px 10px;
+    selection-background-color: #343b73;
     selection-color: #ffffff;
 }
 
@@ -65,140 +68,150 @@ QTextEdit:focus,
 QListView:focus,
 QTreeView:focus,
 QTableView:focus {
-    border: 1px solid #72777f;
+    border: 1px solid #7c83ff;
 }
 
 QComboBox::drop-down {
     border: 0;
-    width: 28px;
+    width: 30px;
 }
 
 QComboBox QAbstractItemView {
-    background-color: #232529;
-    color: #eeeeef;
-    border: 1px solid #41444a;
-    selection-background-color: #4c5056;
+    background-color: #151b26;
+    color: #eef2f8;
+    border: 1px solid #273142;
+    selection-background-color: #2b3260;
     selection-color: #ffffff;
     outline: 0;
 }
 
 QPushButton {
-    min-height: 26px;
-    background-color: #26282c;
-    color: #e6e7e8;
-    border: 1px solid #42454b;
-    border-radius: 5px;
-    padding: 4px 13px;
-}
-
-QPushButton:hover {
-    background-color: #303338;
-    border-color: #555960;
-}
-
-QPushButton:pressed {
-    background-color: #383b40;
-}
-
-QPushButton:focus {
-    border-color: #737880;
-}
-
-QPushButton:default {
-    background-color: #d6d7d9;
-    color: #111214;
-    border-color: #e4e5e6;
+    min-height: 36px;
+    background-color: #171e2a;
+    color: #eef2f8;
+    border: 1px solid #2b3648;
+    border-radius: 9px;
+    padding: 2px 15px;
     font-weight: 600;
 }
 
+QPushButton:hover {
+    background-color: #1d2635;
+    border-color: #3a4860;
+}
+
+QPushButton:pressed {
+    background-color: #121923;
+}
+
+QPushButton:focus {
+    border: 1px solid #7c83ff;
+}
+
+QPushButton:default {
+    background-color: #7c83ff;
+    color: #ffffff;
+    border-color: #7c83ff;
+    font-weight: 700;
+}
+
 QPushButton:default:hover {
-    background-color: #eeeeef;
+    background-color: #8b91ff;
 }
 
 QPushButton:disabled {
-    background-color: #202225;
-    color: #666a70;
-    border-color: #303237;
+    background-color: #10151d;
+    color: #5f6877;
+    border-color: #1d2531;
 }
 
 QCheckBox,
 QRadioButton {
     background-color: transparent;
-    spacing: 7px;
-    color: #dedfe1;
+    spacing: 8px;
+    color: #dce2ec;
+}
+
+QCheckBox::indicator,
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
 }
 
 QHeaderView::section {
-    background-color: #24262a;
-    color: #cfd1d4;
+    background-color: #151b26;
+    color: #cfd7e5;
     border: 0;
-    border-right: 1px solid #34373b;
-    border-bottom: 1px solid #34373b;
-    padding: 6px;
+    border-right: 1px solid #273142;
+    border-bottom: 1px solid #273142;
+    padding: 8px;
+    font-weight: 600;
 }
 
 QTabWidget::pane {
-    border: 1px solid #34373b;
-    border-radius: 5px;
-    background-color: #1f2124;
+    border: 1px solid #273142;
+    border-radius: 10px;
+    background-color: #10151e;
 }
 
 QTabBar::tab {
-    background-color: #222428;
-    color: #aeb1b5;
-    border: 1px solid #34373b;
-    padding: 6px 12px;
+    min-height: 30px;
+    background-color: #111722;
+    color: #98a2b3;
+    border: 1px solid #273142;
+    padding: 5px 13px;
 }
 
 QTabBar::tab:selected {
-    background-color: #d6d7d9;
-    color: #111214;
+    background-color: #1a2030;
+    color: #ffffff;
+    border-bottom: 2px solid #7c83ff;
 }
 
 QProgressBar {
-    min-height: 12px;
-    background-color: #25272b;
-    border: 1px solid #373a3f;
-    border-radius: 6px;
-    color: #e6e7e8;
+    min-height: 14px;
+    background-color: #0d121a;
+    border: 1px solid #273142;
+    border-radius: 7px;
+    color: #d9e0eb;
     text-align: center;
 }
 
 QProgressBar::chunk {
-    background-color: #b7babf;
-    border-radius: 5px;
+    background-color: #7c83ff;
+    border-radius: 6px;
+}
+
+QScrollArea {
+    border: 0;
+    background: transparent;
 }
 
 QScrollBar:vertical {
-    background-color: #1b1d20;
-    width: 10px;
-    margin: 0;
+    background-color: transparent;
+    width: 11px;
+    margin: 4px 1px;
 }
 
 QScrollBar::handle:vertical {
-    background-color: #484c52;
-    min-height: 28px;
+    background-color: #364156;
+    min-height: 34px;
     border-radius: 5px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background-color: #62666d;
+    background-color: #4a5871;
 }
 
 QScrollBar:horizontal {
-    background-color: #1b1d20;
-    height: 10px;
-    margin: 0;
+    background-color: transparent;
+    height: 11px;
 }
 
 QScrollBar::handle:horizontal {
-    background-color: #484c52;
-    min-width: 28px;
+    background-color: #364156;
+    min-width: 34px;
     border-radius: 5px;
-}
-
-QScrollBar::handle:horizontal:hover {
-    background-color: #62666d;
 }
 
 QScrollBar::add-line,
@@ -210,19 +223,19 @@ QScrollBar::sub-page {
 }
 
 QToolTip {
-    background-color: #292c30;
-    color: #f0f1f2;
-    border: 1px solid #464a50;
-    padding: 4px;
+    background-color: #171e29;
+    color: #ffffff;
+    border: 1px solid #344056;
+    padding: 6px;
 }
 
-/* Calamares' widget progress view is kept in its native vertical layout. */
+/* Calamares keeps its native vertical progress/navigation structure. */
 #sidebarApp {
-    background-color: #15171a;
-    border-right: 1px solid #303338;
+    background-color: #0c1017;
+    border-right: 1px solid #273142;
 }
 
 #navigationWidget {
-    background-color: #1b1d20;
-    border-top: 1px solid #2e3135;
+    background-color: #0c1017;
+    border-top: 1px solid #273142;
 }
