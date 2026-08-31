@@ -117,6 +117,14 @@ jobs:
           sudo apt-get install -y qemu-system-x86 xorriso
           ./scripts/qemu-boot-smoke.sh FlexOS-*.iso
 
+      - name: Prepare component package output
+        run: |
+          sudo rm -rf dist/packages
+          sudo mkdir -p dist/packages
+          sudo chown -R "$USER:$USER" dist/packages
+          test -w dist/packages
+          echo "Package output owner: $(stat -c '%U:%G %a' dist/packages)"
+
       - name: Build FlexOS component packages
         run: |
           EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
