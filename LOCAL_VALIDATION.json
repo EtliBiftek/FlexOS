@@ -1,6 +1,6 @@
 {
-  "artifact": "FlexOS 0.9 Validation Snapshot",
-  "source_version": "0.9",
+  "artifact": "FlexOS 0.9.4a Validation Snapshot",
+  "source_version": "0.9.4a",
   "local_validation": {
     "merged_source_validation": "requires_rerun",
     "workflow_yaml_parse": "requires_rerun",
