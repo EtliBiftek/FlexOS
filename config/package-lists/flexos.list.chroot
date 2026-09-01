@@ -5,6 +5,8 @@ live-config-systemd
 user-setup
 linux-image-amd64
 systemd-sysv
+libpam-systemd
+dbus-user-session
 locales
 keyboard-configuration
 console-setup
