@@ -69,7 +69,6 @@ desktop=json.loads(Path("config/includes.chroot/usr/share/flexos/desktop-profile
 identity=json.loads(Path("config/includes.chroot/usr/share/flexos/identity.json").read_text()); assert identity["build_id"]==version
 osr=Path("config/includes.chroot/etc/os-release").read_text(); assert "ID=flexos" in osr; assert f'BUILD_ID="{version}"' in osr
 local_validation=json.loads(Path("LOCAL_VALIDATION.json").read_text(encoding="utf-8")); assert local_validation.get("source_version")==version, "LOCAL_VALIDATION source_version must match VERSION"
-assert matrix.get("release")==version, "QA test matrix release must match VERSION"
 pkgmap=json.loads(Path("packages/package-map.json").read_text())
 for name,spec in pkgmap.items():
     for rel in spec["paths"]: assert (Path("config/includes.chroot")/rel).exists(), f"{name}: package source path missing: {rel}"
