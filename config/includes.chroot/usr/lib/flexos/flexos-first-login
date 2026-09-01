@@ -21,8 +21,8 @@ if grep -q 'boot=live' /proc/cmdline 2>/dev/null; then
   chmod +x "$HOME/Desktop/Install FlexOS.desktop" 2>/dev/null || true
 else
   welcome_marker="${XDG_CONFIG_HOME:-$HOME/.config}/flexos/welcome-complete"
-  if [[ ! -e "$welcome_marker" ]] && command -v flex-session-launch >/dev/null 2>&1; then
-    (sleep 2; flex-session-launch /usr/bin/flex-welcome >/dev/null 2>&1) &
+  if [[ ! -e "$welcome_marker" ]] && command -v flex-welcome >/dev/null 2>&1; then
+    (sleep 2; /usr/bin/flex-welcome >/dev/null 2>&1) &
   fi
 fi
 
