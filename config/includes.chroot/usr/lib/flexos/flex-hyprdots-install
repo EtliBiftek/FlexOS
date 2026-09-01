@@ -47,24 +47,27 @@ def user_run(cmd, timeout=14400):
 
 work = home / ".local/share/flexos/dots-hyprland"
 preset_dir = home / ".config/quickshell/end4-pC"
-sudoers = Path(f"/etc/sudoers.d/flexos-hyprdots-{username}")
 
 try:
-    sudoers.write_text(f"{username} ALL=(root) NOPASSWD: ALL\n", encoding="utf-8")
-    os.chmod(sudoers, 0o440)
-    root_run(["visudo", "-cf", str(sudoers)], timeout=30)
-
     work.parent.mkdir(parents=True, exist_ok=True)
     if work.exists():
         shutil.rmtree(work)
     root_run(["git", "clone", "--filter=blob:none", BASE_REPO, str(work)], timeout=1800)
     root_run(["git", "-C", str(work), "checkout", "--detach", BASE_COMMIT], timeout=120)
+    root_run(["git", "-C", str(work), "submodule", "update", "--init", "--recursive"], timeout=1800)
     root_run(["chown", "-R", f"{username}:{pw.pw_gid}", str(work)])
 
-    user_run([
-        str(work / "setup"), "install", "--via-nix", "--force",
-        "--skip-sysupdate", "--skip-plasmaintg", "--ignore-outdate",
-    ])
+    # Do not run the third-party setup script with passwordless sudo. FlexOS already
+    # installs the system dependencies; copy only the files from the reviewed commit.
+    config_src = work / "dots/.config"
+    local_src = work / "dots/.local"
+    if not config_src.is_dir() or not local_src.is_dir():
+        raise RuntimeError("Pinned Hyprland dots checkout is missing expected dotfile directories")
+    (home / ".config").mkdir(parents=True, exist_ok=True)
+    (home / ".local").mkdir(parents=True, exist_ok=True)
+    root_run(["chown", "-R", f"{username}:{pw.pw_gid}", str(home / ".config"), str(home / ".local")])
+    user_run(["rsync", "-a", str(config_src) + "/", str(home / ".config") + "/"])
+    user_run(["rsync", "-a", str(local_src) + "/", str(home / ".local") + "/"])
 
     preset_dir.parent.mkdir(parents=True, exist_ok=True)
     if preset_dir.exists():
@@ -83,10 +86,8 @@ try:
     root_run(["chown", "-R", f"{username}:{pw.pw_gid}", str(home / ".config"), str(home / ".local")])
     (state / "hyprdots-profile").write_text("end4pc\n", encoding="utf-8")
     (state / "hyprdots-status").write_text("installed\n", encoding="utf-8")
-finally:
-    try:
-        sudoers.unlink()
-    except FileNotFoundError:
-        pass
+except Exception:
+    (state / "hyprdots-status").write_text("failed\n", encoding="utf-8")
+    raise
 
 print("FlexOS Hyprland dots installed: end4-pC (pctrade, based on end-4 illogical-impulse)")
