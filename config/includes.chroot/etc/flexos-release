@@ -1,6 +1,6 @@
-FlexOS 0.9
+FlexOS 0.9.4a
 Creator: Pifo
 Base: Debian 13 (Trixie)
-Desktop: KDE Plasma 6
+Desktop: KDE Plasma 6 / GNOME / Hyprland
 Channel: beta-development
 Project: https://github.com/EtliBiftek/FlexOS
