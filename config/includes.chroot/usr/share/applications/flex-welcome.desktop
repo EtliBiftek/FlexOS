@@ -6,4 +6,5 @@ Comment[tr]=FlexOS ilk kurulum sihirbazı
 Exec=/usr/bin/flex-welcome
 Icon=flexos-logo
 Terminal=false
+StartupNotify=true
 Categories=X-FlexOS;System;
