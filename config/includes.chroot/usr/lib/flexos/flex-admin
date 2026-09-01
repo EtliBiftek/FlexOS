@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os, re, shutil, subprocess, sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 LOG=Path("/var/log/flexos-admin.log")
 
@@ -61,34 +62,59 @@ def set_grub_key(key,value):
     lines.append(f'{key}="{value}"')
     p.write_text("\n".join(lines)+"\n",encoding="utf-8")
 
+def is_debian_archive_uri(value):
+    try:u=urlsplit(value)
+    except ValueError:return False
+    host=(u.hostname or "").lower()
+    return u.scheme in {"http","https"} and (host=="deb.debian.org" or host.endswith(".debian.org")) and u.path.rstrip("/")=="/debian"
+
+def add_nonfree_components(values):
+    comps=list(values)
+    for c in ("main","contrib","non-free","non-free-firmware"):
+        if c not in comps:comps.append(c)
+    return comps
+
 def ensure_nonfree():
     changed=False
     for p in Path("/etc/apt/sources.list.d").glob("*.sources"):
-        text=p.read_text(errors="ignore");out=[]
-        local=False
-        for line in text.splitlines():
-            if line.startswith("Components:"):
-                comps=line.split(":",1)[1].split()
-                for c in ("main","contrib","non-free","non-free-firmware"):
-                    if c not in comps:
-                        comps.append(c);local=True
-                line="Components: "+" ".join(comps)
-            out.append(line)
-        if local:
-            p.write_text("\n".join(out)+"\n",encoding="utf-8");changed=True
+        text=p.read_text(errors="ignore");pieces=[];local=False
+        for stanza in re.split(r'(\n\s*\n)',text):
+            if not stanza or stanza.isspace():pieces.append(stanza);continue
+            lines=stanza.splitlines()
+            uris=[]
+            for line in lines:
+                if line.startswith("URIs:"):uris.extend(line.split(":",1)[1].split())
+            if not any(is_debian_archive_uri(uri) for uri in uris):
+                pieces.append(stanza);continue
+            out=[]
+            for line in lines:
+                if line.startswith("Components:"):
+                    old=line.split(":",1)[1].split();new=add_nonfree_components(old)
+                    if new!=old:local=True
+                    line="Components: "+" ".join(new)
+                out.append(line)
+            pieces.append("\n".join(out)+("\n" if stanza.endswith("\n") else ""))
+        newtext="".join(pieces)
+        if local and newtext!=text:
+            p.write_text(newtext,encoding="utf-8");changed=True
     p=Path("/etc/apt/sources.list")
     if p.exists():
-        out=[];local=False
-        for line in p.read_text(errors="ignore").splitlines():
-            if line.strip().startswith("deb ") and not line.lstrip().startswith("#"):
-                parts=line.split()
-                for c in ("contrib","non-free","non-free-firmware"):
-                    if c not in parts:
-                        parts.append(c);local=True
-                line=" ".join(parts)
+        text=p.read_text(errors="ignore");out=[];local=False
+        for line in text.splitlines():
+            stripped=line.lstrip()
+            if (stripped.startswith("deb ") or stripped.startswith("deb-src ")) and not stripped.startswith("#"):
+                body,sep,comment=line.partition("#")
+                m=re.match(r'^(\s*deb(?:-src)?\s+(?:\[[^\]]+\]\s+)?)(\S+)(\s+\S+\s+)(.*?)(\s*)$',body)
+                if m and is_debian_archive_uri(m.group(2)):
+                    old=m.group(4).split();new=add_nonfree_components(old)
+                    if new!=old:
+                        local=True
+                        body=m.group(1)+m.group(2)+m.group(3)+" ".join(new)+m.group(5)
+                        line=body+(sep+comment if sep else "")
             out.append(line)
-        if local:
-            p.write_text("\n".join(out)+"\n",encoding="utf-8");changed=True
+        newtext="\n".join(out)+("\n" if text.endswith("\n") else "")
+        if local and newtext!=text:
+            p.write_text(newtext,encoding="utf-8");changed=True
     return changed
 
 def remove_nvidia():
@@ -137,30 +163,7 @@ def enable_flexos_repo():
     print("FlexOS signed APT repository enabled.")
 
 def install_component_update(directory, filenames):
-    base=Path(directory).resolve()
-    if not str(base).startswith("/tmp/flexos-update-"):
-        raise SystemExit("Refusing component update outside a FlexOS temporary directory.")
-    debs=[]
-    for name in filenames:
-        if "/" in name or not re.fullmatch(r"flexos-[A-Za-z0-9.+~_-]+\.deb",name):
-            raise SystemExit(f"Invalid update package filename: {name}")
-        p=(base/name).resolve()
-        if p.parent!=base or not p.exists():
-            raise SystemExit(f"Missing update package: {name}")
-        debs.append(str(p))
-    if not debs:
-        print("No FlexOS component packages need updating.")
-        return
-    pre_snapshot("Before FlexOS component update")
-    rc,_=run(["dpkg","-i",*debs],check=False,timeout=1200)
-    if rc:
-        apt_update()
-        run(["apt-get","-f","install","-y"],timeout=1800)
-        run(["dpkg","-i",*debs],timeout=1200)
-    run(["systemctl","daemon-reload"],check=False,timeout=30)
-    run(["update-initramfs","-u","-k","all"],check=False,timeout=1200)
-    run(["update-grub"],check=False,timeout=300)
-    print("FlexOS component update completed. Restart affected applications; reboot if boot/driver components changed.")
+    raise SystemExit("Legacy path-based component updates are disabled. Use `flex-self-update install`.")
 
 require_root()
 args=sys.argv[1:]
