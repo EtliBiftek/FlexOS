@@ -118,12 +118,22 @@ def insert_before(token, entries):
 if not insert_after("- keyboard", ["- packagechooser@desktop","- packagechooserq@hyprdots"]):
     insert_before("- partition", ["- packagechooser@desktop","- packagechooserq@hyprdots"])
 insert_after("- partition", ["- packagechooser@packageprofile"])
-insert_after("- sources-final", [
+
+exec_jobs=[
     "- contextualprocess@flexdesktop",
     "- contextualprocess@flexpackages",
     "- contextualprocess@flexhyprdots",
-])
-insert_before("- umount", ["- shellprocess@flexpostinstall"])
+]
+# Debian/Calamares configurations are not required to contain a sources-final
+# job. KDE can mask this mistake because it is already in the live squashfs,
+# while GNOME/Hyprland then never get installed. Prefer sources-final when it
+# exists, but always fall back to the last safe point before unmounting target.
+if not insert_after("- sources-final", exec_jobs):
+    if not insert_before("- umount", exec_jobs):
+        raise SystemExit("Calamares exec sequence has no safe insertion point for FlexOS desktop jobs")
+
+if not insert_before("- umount", ["- shellprocess@flexpostinstall"]):
+    raise SystemExit("Calamares exec sequence has no umount step for FlexOS post-install")
 
 p.write_text("\n".join(lines).rstrip()+"\n")
 PY
