@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import os, subprocess, sys
+import os, pwd, shutil, subprocess, sys
 from pathlib import Path
 
 if os.geteuid() != 0:
@@ -10,19 +10,25 @@ desktop = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower()
 target_user = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
 if desktop not in {"kde", "gnome", "hyprland"}:
     raise SystemExit(f"Unsupported desktop profile: {desktop or 'missing'}")
+if not target_user or target_user == "root":
+    raise SystemExit("Missing or unsafe target username from Calamares")
+try:
+    target_pw = pwd.getpwnam(target_user)
+except KeyError as exc:
+    raise SystemExit(f"Target user does not exist: {target_user}") from exc
 
 state = Path("/etc/flexos")
 state.mkdir(parents=True, exist_ok=True)
 status = state / "desktop-profile-status"
 status.write_text("installing\n", encoding="utf-8")
 
-def run(cmd, timeout=7200, env=None):
-    print("+", " ".join(cmd), flush=True)
+def run(cmd, timeout=7200, env=None, check=True):
+    print("+", " ".join(map(str, cmd)), flush=True)
     merged = os.environ.copy()
     merged["DEBIAN_FRONTEND"] = "noninteractive"
     if env:
         merged.update(env)
-    subprocess.run(cmd, check=True, env=merged, timeout=timeout)
+    return subprocess.run(list(map(str, cmd)), check=check, env=merged, timeout=timeout)
 
 def backports():
     src = Path("/etc/apt/sources.list.d/flexos-backports.sources")
@@ -35,11 +41,98 @@ def backports():
         encoding="utf-8",
     )
 
-def disable(unit):
-    subprocess.run(["systemctl", "disable", unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def installed(package):
+    p = subprocess.run(
+        ["dpkg-query", "-W", "-f=${db:Status-Abbrev}", package],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+    )
+    return p.returncode == 0 and p.stdout.startswith("ii")
 
-def enable(unit):
-    subprocess.run(["systemctl", "enable", unit], check=False)
+def require_packages(packages):
+    missing = [p for p in packages if not installed(p)]
+    if missing:
+        raise SystemExit("Desktop installation is incomplete; missing packages: " + ", ".join(missing))
+
+def set_display_manager(name):
+    if name == "gdm3":
+        daemon = Path("/usr/sbin/gdm3")
+        unit = Path("/lib/systemd/system/gdm3.service")
+        other = "sddm.service"
+    elif name == "sddm":
+        daemon = Path("/usr/bin/sddm")
+        unit = Path("/lib/systemd/system/sddm.service")
+        other = "gdm3.service"
+    else:
+        raise SystemExit(f"Unsupported display manager: {name}")
+    if not daemon.exists() or not unit.exists():
+        raise SystemExit(f"Display manager is incomplete: {name}")
+
+    subprocess.run(["systemctl", "disable", other], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    default = Path("/etc/X11/default-display-manager")
+    default.parent.mkdir(parents=True, exist_ok=True)
+    default.write_text(str(daemon) + "\n", encoding="utf-8")
+
+    dm_link = Path("/etc/systemd/system/display-manager.service")
+    dm_link.parent.mkdir(parents=True, exist_ok=True)
+    if dm_link.is_symlink() or dm_link.exists():
+        dm_link.unlink()
+    dm_link.symlink_to(unit)
+    run(["systemctl", "daemon-reload"], timeout=60)
+    run(["systemctl", "enable", "--force", f"{name}.service"], timeout=60)
+    # systemctl enable may recreate the alias; force the Debian default DM link last.
+    if dm_link.is_symlink() or dm_link.exists():
+        dm_link.unlink()
+    dm_link.symlink_to(unit)
+    run(["systemctl", "set-default", "graphical.target"], timeout=60)
+
+def verify_session(path):
+    p = Path(path)
+    if not p.exists():
+        raise SystemExit(f"Desktop session file is missing: {path}")
+
+def chown_tree(path):
+    path = Path(path)
+    if not path.exists():
+        return
+    for root, dirs, files in os.walk(path):
+        os.chown(root, target_pw.pw_uid, target_pw.pw_gid)
+        for name in dirs:
+            os.chown(Path(root) / name, target_pw.pw_uid, target_pw.pw_gid)
+        for name in files:
+            os.chown(Path(root) / name, target_pw.pw_uid, target_pw.pw_gid)
+
+def prepare_hyprland_user():
+    home = Path(target_pw.pw_dir)
+    home.mkdir(parents=True, exist_ok=True)
+    config_dir = home / ".config/hypr"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config = config_dir / "hyprland.conf"
+    if not config.exists():
+        config.write_text(
+            "# FlexOS safe Hyprland baseline. Optional installer dots may replace/extend this.\n"
+            "$mod = SUPER\n"
+            "monitor = , preferred, auto, 1\n\n"
+            "exec-once = dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP\n"
+            "exec-once = systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP\n\n"
+            "input {\n"
+            "    follow_mouse = 1\n"
+            "}\n\n"
+            "general {\n"
+            "    gaps_in = 4\n"
+            "    gaps_out = 8\n"
+            "    border_size = 2\n"
+            "}\n\n"
+            "misc {\n"
+            "    disable_hyprland_logo = true\n"
+            "}\n\n"
+            "bind = $mod, RETURN, exec, foot\n"
+            "bind = $mod, D, exec, wofi --show drun\n"
+            "bind = $mod, Q, killactive\n"
+            "bind = $mod SHIFT, E, exit\n"
+            "bind = $mod, F, fullscreen\n",
+            encoding="utf-8",
+        )
+    chown_tree(config_dir)
 
 plasma_core = [
     "plasma-desktop", "plasma-workspace", "kwin-wayland", "kwin-x11",
@@ -48,45 +141,67 @@ plasma_core = [
     "xdg-desktop-portal-kde",
 ]
 
-run(["apt-get", "update"], timeout=1200)
-
-if desktop == "kde":
-    run(["apt-get", "install", "-y",
-         "plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm",
-         "systemsettings", "xdg-desktop-portal-kde"])
-    disable("gdm3.service")
-    enable("sddm.service")
-
-elif desktop == "gnome":
-    subprocess.run(
-        ["debconf-set-selections"],
-        input="gdm3 shared/default-x-display-manager select gdm3\n",
-        text=True,
-        check=False,
-    )
-    run(["apt-get", "install", "-y", "task-gnome-desktop", "gdm3"])
-    disable("sddm.service")
-    enable("gdm3.service")
-    run(["apt-get", "purge", "-y", "sddm", "sddm-theme-breeze", *plasma_core])
-    run(["apt-get", "autoremove", "-y"], timeout=1800)
-
-elif desktop == "hyprland":
-    backports()
+try:
     run(["apt-get", "update"], timeout=1200)
-    run(["apt-get", "install", "-y", "-t", "trixie-backports",
-         "hyprland", "quickshell", "xdg-desktop-portal-hyprland"])
-    helpers = [
-        "sddm", "network-manager", "pipewire", "wireplumber", "foot", "wofi",
-        "grim", "slurp", "swaybg", "swayidle", "swaylock", "wl-clipboard",
-        "brightnessctl", "playerctl", "jq", "git", "curl", "rsync", "unzip",
-        "gnome-keyring", "fish", "nix-bin", "nix-setup-systemd",
-    ]
-    run(["apt-get", "install", "-y", *helpers])
-    disable("gdm3.service")
-    enable("sddm.service")
-    run(["apt-get", "purge", "-y", *plasma_core])
-    run(["apt-get", "autoremove", "-y"], timeout=1800)
 
-(state / "desktop-profile").write_text(desktop + "\n", encoding="utf-8")
-status.write_text("installed\n", encoding="utf-8")
-print(f"FlexOS desktop profile installed: {desktop} (user={target_user or 'unknown'})")
+    if desktop == "kde":
+        run(["apt-get", "install", "-y",
+             "plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm",
+             "systemsettings", "xdg-desktop-portal-kde"])
+        require_packages(["plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm"])
+        set_display_manager("sddm")
+
+    elif desktop == "gnome":
+        subprocess.run(
+            ["debconf-set-selections"],
+            input="gdm3 shared/default-x-display-manager select gdm3\n",
+            text=True,
+            check=True,
+        )
+        run(["apt-get", "install", "-y",
+             "task-gnome-desktop", "gnome-core", "gdm3", "gnome-session",
+             "gnome-shell", "gnome-settings-daemon", "network-manager-gnome",
+             "xdg-desktop-portal-gnome", "xdg-user-dirs", "dbus-user-session"])
+        # Remove the live KDE login stack only after the complete GNOME stack exists.
+        run(["apt-get", "purge", "-y", "sddm", "sddm-theme-breeze", *plasma_core], timeout=3600)
+        run(["apt-get", "autoremove", "-y"], timeout=1800)
+        require_packages(["task-gnome-desktop", "gnome-core", "gdm3", "gnome-session", "gnome-shell"])
+        verify_session("/usr/share/wayland-sessions/gnome.desktop")
+        set_display_manager("gdm3")
+
+    elif desktop == "hyprland":
+        backports()
+        run(["apt-get", "update"], timeout=1200)
+        # Keep the Hyprland ecosystem on the same Debian backports suite so its
+        # rapidly-moving libraries remain ABI-compatible with the compositor.
+        run(["apt-get", "install", "-y", "-t", "trixie-backports",
+             "hyprland", "quickshell", "xdg-desktop-portal-hyprland",
+             "hypridle", "hyprlock", "hyprpaper", "hyprpolkitagent"])
+        helpers = [
+            "sddm", "network-manager", "pipewire", "wireplumber", "xwayland",
+            "xdg-desktop-portal", "xdg-desktop-portal-gtk", "dbus-user-session",
+            "polkitd", "foot", "wofi", "grim", "slurp", "swaybg", "wl-clipboard",
+            "brightnessctl", "playerctl", "jq", "git", "curl", "rsync", "unzip",
+            "gnome-keyring", "fish", "xdg-user-dirs", "xdg-utils",
+            "fonts-noto", "fonts-noto-color-emoji", "mesa-vulkan-drivers", "libgl1-mesa-dri",
+        ]
+        run(["apt-get", "install", "-y", *helpers])
+        # KDE is copied from the live image; remove it after SDDM + Hyprland are safely installed.
+        run(["apt-get", "purge", "-y", *plasma_core], timeout=3600)
+        run(["apt-get", "autoremove", "-y"], timeout=1800)
+        require_packages([
+            "hyprland", "quickshell", "xdg-desktop-portal-hyprland",
+            "hypridle", "hyprlock", "hyprpaper", "hyprpolkitagent",
+            "sddm", "pipewire", "wireplumber", "xwayland",
+        ])
+        verify_session("/usr/share/wayland-sessions/hyprland.desktop")
+        prepare_hyprland_user()
+        set_display_manager("sddm")
+
+    (state / "desktop-profile").write_text(desktop + "\n", encoding="utf-8")
+    status.write_text("installed\n", encoding="utf-8")
+except Exception:
+    status.write_text("failed\n", encoding="utf-8")
+    raise
+
+print(f"FlexOS desktop profile installed and verified: {desktop} (user={target_user})")
