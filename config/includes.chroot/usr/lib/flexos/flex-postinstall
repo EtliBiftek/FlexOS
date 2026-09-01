@@ -12,6 +12,13 @@ def run(cmd,timeout=180):
     except Exception:
         return None
 
+def must_run(cmd,timeout=180):
+    p=run(cmd,timeout)
+    if not p or p.returncode:
+        detail=(p.stdout.strip() if p and p.stdout else 'command failed')
+        raise SystemExit(f"Post-install command failed: {' '.join(cmd)}: {detail}")
+    return p
+
 def remove_live_autologin():
     p=Path('/etc/sddm.conf.d/10-flexos.conf')
     if not p.exists():
@@ -25,6 +32,34 @@ def remove_live_autologin():
         if not skipping:
             out.append(line)
     p.write_text('\n'.join(out).rstrip()+'\n',encoding='utf-8')
+
+def configure_display_manager(desktop):
+    if desktop=='gnome':
+        name='gdm3';daemon=Path('/usr/sbin/gdm3');unit=Path('/lib/systemd/system/gdm3.service');other='sddm.service'
+    else:
+        name='sddm';daemon=Path('/usr/bin/sddm');unit=Path('/lib/systemd/system/sddm.service');other='gdm3.service'
+    if not daemon.exists() or not unit.exists():
+        raise SystemExit(f'Display manager is incomplete for {desktop}: {name}')
+
+    default=Path('/etc/X11/default-display-manager')
+    default.parent.mkdir(parents=True,exist_ok=True)
+    default.write_text(str(daemon)+'\n',encoding='utf-8')
+
+    run(['systemctl','disable',other],30)
+    dm=Path('/etc/systemd/system/display-manager.service')
+    dm.parent.mkdir(parents=True,exist_ok=True)
+    if dm.is_symlink() or dm.exists():dm.unlink()
+    dm.symlink_to(unit)
+    must_run(['systemctl','daemon-reload'],30)
+    must_run(['systemctl','enable','--force',f'{name}.service'],30)
+    if dm.is_symlink() or dm.exists():dm.unlink()
+    dm.symlink_to(unit)
+    must_run(['systemctl','set-default','graphical.target'],30)
+
+    if desktop=='gnome' and not Path('/usr/share/wayland-sessions/gnome.desktop').exists():
+        raise SystemExit('GNOME session file is missing after installation.')
+    if desktop=='hyprland' and not Path('/usr/share/wayland-sessions/hyprland.desktop').exists():
+        raise SystemExit('Hyprland session file is missing after installation.')
 
 def configure_snapper():
     fs=run(['findmnt','-n','-o','FSTYPE','/'])
@@ -53,33 +88,34 @@ desktop=desktop_file.read_text(encoding='utf-8').strip() if desktop_file.exists(
 if desktop not in {'kde','gnome','hyprland'}:
     desktop='kde'
 desktop_file.write_text(desktop+'\n',encoding='utf-8')
-(state/'desktop-profile-status').write_text('installed\n',encoding='utf-8')
+status=state/'desktop-profile-status'
+status.write_text('finalizing\n',encoding='utf-8')
 if not (state/'optimized-repo').exists():
     (state/'optimized-repo').write_text('baseline\n',encoding='utf-8')
 
-remove_live_autologin()
-snap=configure_snapper()
-boot='UEFI' if Path('/sys/firmware/efi').exists() else 'BIOS'
-fs=run(['findmnt','-n','-o','FSTYPE','/'])
-fstype=fs.stdout.strip() if fs and fs.returncode==0 else 'unknown'
-desktop_name={'kde':'KDE Plasma','gnome':'GNOME','hyprland':'Hyprland'}[desktop]
-(state/'install-info').write_text(
-    f'desktop={desktop_name}\nboot={boot}\nfilesystem={fstype}\nsnapshot={snap}\n',
-    encoding='utf-8'
-)
+try:
+    remove_live_autologin()
+    configure_display_manager(desktop)
+    snap=configure_snapper()
+    boot='UEFI' if Path('/sys/firmware/efi').exists() else 'BIOS'
+    fs=run(['findmnt','-n','-o','FSTYPE','/'])
+    fstype=fs.stdout.strip() if fs and fs.returncode==0 else 'unknown'
+    desktop_name={'kde':'KDE Plasma','gnome':'GNOME','hyprland':'Hyprland'}[desktop]
+    (state/'install-info').write_text(
+        f'desktop={desktop_name}\nboot={boot}\nfilesystem={fstype}\nsnapshot={snap}\n',
+        encoding='utf-8'
+    )
 
-common=('NetworkManager.service','flexos-profile.service','flexos-identity.service','flexos-performance.service','flexos-scx-profile-sync.timer','ufw.service')
-for unit in common:
-    run(['systemctl','enable',unit],30)
-if desktop=='gnome':
-    run(['systemctl','disable','sddm.service'],30)
-    run(['systemctl','enable','gdm3.service'],30)
-else:
-    run(['systemctl','disable','gdm3.service'],30)
-    run(['systemctl','enable','sddm.service'],30)
+    common=('NetworkManager.service','flexos-profile.service','flexos-identity.service','flexos-performance.service','flexos-scx-profile-sync.timer','ufw.service')
+    for unit in common:
+        run(['systemctl','enable',unit],30)
 
-run(['systemctl','set-default','graphical.target'],30)
-run(['sysctl','--system'],60)
-run(['update-initramfs','-u','-k','all'],600)
-run(['update-grub'],180)
+    run(['sysctl','--system'],60)
+    run(['update-initramfs','-u','-k','all'],600)
+    run(['update-grub'],180)
+    status.write_text('installed\n',encoding='utf-8')
+except Exception:
+    status.write_text('failed\n',encoding='utf-8')
+    raise
+
 print(f'FlexOS post-install complete: desktop={desktop}, filesystem={fstype}, snapper={snap}, boot={boot}')
