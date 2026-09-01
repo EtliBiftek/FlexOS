@@ -1,11 +1,11 @@
 {
   "name": "FlexOS",
-  "version": "0.9",
-  "build_id": "0.9",
+  "version": "0.9.4a",
+  "build_id": "0.9.4a",
   "channel": "beta-development",
   "creator": "Pifo",
   "base": "Debian 13 (Trixie)",
-  "desktop": "KDE Plasma 6",
+  "desktop": "KDE Plasma 6 / GNOME / Hyprland",
   "project": "https://github.com/EtliBiftek/FlexOS",
   "support": "https://github.com/EtliBiftek/FlexOS/issues"
 }
