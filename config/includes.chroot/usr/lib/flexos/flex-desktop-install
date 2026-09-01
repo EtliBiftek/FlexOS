@@ -147,8 +147,8 @@ try:
     if desktop == "kde":
         run(["apt-get", "install", "-y",
              "plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm",
-             "systemsettings", "xdg-desktop-portal-kde"])
-        require_packages(["plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm"])
+             "systemsettings", "xdg-desktop-portal-kde", "libpam-systemd", "dbus-user-session"])
+        require_packages(["plasma-desktop", "plasma-workspace", "kwin-wayland", "sddm", "libpam-systemd"])
         set_display_manager("sddm")
 
     elif desktop == "gnome":
@@ -161,11 +161,11 @@ try:
         run(["apt-get", "install", "-y",
              "task-gnome-desktop", "gnome-core", "gdm3", "gnome-session",
              "gnome-shell", "gnome-settings-daemon", "network-manager-gnome",
-             "xdg-desktop-portal-gnome", "xdg-user-dirs", "dbus-user-session"])
+             "xdg-desktop-portal-gnome", "xdg-user-dirs", "dbus-user-session", "libpam-systemd"])
         # Remove the live KDE login stack only after the complete GNOME stack exists.
         run(["apt-get", "purge", "-y", "sddm", "sddm-theme-breeze", *plasma_core], timeout=3600)
         run(["apt-get", "autoremove", "-y"], timeout=1800)
-        require_packages(["task-gnome-desktop", "gnome-core", "gdm3", "gnome-session", "gnome-shell"])
+        require_packages(["task-gnome-desktop", "gnome-core", "gdm3", "gnome-session", "gnome-shell", "libpam-systemd"])
         verify_session("/usr/share/wayland-sessions/gnome.desktop")
         set_display_manager("gdm3")
 
@@ -175,10 +175,10 @@ try:
         # Keep the Hyprland ecosystem on the same Debian backports suite so its
         # rapidly-moving libraries remain ABI-compatible with the compositor.
         run(["apt-get", "install", "-y", "-t", "trixie-backports",
-             "hyprland", "quickshell", "xdg-desktop-portal-hyprland",
+             "hyprland", "uwsm", "quickshell", "xdg-desktop-portal-hyprland",
              "hypridle", "hyprlock", "hyprpaper", "hyprpolkitagent"])
         helpers = [
-            "sddm", "network-manager", "pipewire", "wireplumber", "xwayland",
+            "sddm", "libpam-systemd", "network-manager", "pipewire", "wireplumber", "xwayland",
             "xdg-desktop-portal", "xdg-desktop-portal-gtk", "dbus-user-session",
             "polkitd", "foot", "wofi", "grim", "slurp", "swaybg", "wl-clipboard",
             "brightnessctl", "playerctl", "jq", "git", "curl", "rsync", "unzip",
@@ -190,11 +190,12 @@ try:
         run(["apt-get", "purge", "-y", *plasma_core], timeout=3600)
         run(["apt-get", "autoremove", "-y"], timeout=1800)
         require_packages([
-            "hyprland", "quickshell", "xdg-desktop-portal-hyprland",
+            "hyprland", "uwsm", "quickshell", "xdg-desktop-portal-hyprland",
             "hypridle", "hyprlock", "hyprpaper", "hyprpolkitagent",
-            "sddm", "pipewire", "wireplumber", "xwayland",
+            "sddm", "libpam-systemd", "dbus-user-session", "pipewire", "wireplumber", "xwayland",
         ])
         verify_session("/usr/share/wayland-sessions/hyprland.desktop")
+        verify_session("/usr/share/wayland-sessions/hyprland-uwsm.desktop")
         prepare_hyprland_user()
         set_display_manager("sddm")
 
