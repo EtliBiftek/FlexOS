@@ -7,6 +7,7 @@ CFG=Path('/etc/flexos/scx.json')
 LOADER_CFG=Path('/etc/scx_loader/config.toml')
 MODES={'auto':'Auto','gaming':'Gaming','lowlatency':'LowLatency','powersave':'PowerSave','server':'Server'}
 SCX_REF=os.environ.get('FLEX_SCX_REF','v1.1.1')
+SCX_LOADER_COMMIT='368845eb73737ea280def513afe46f4447b8983f'
 
 
 def run(cmd, check=False, timeout=None, env=None):
@@ -98,8 +99,12 @@ def install():
     with tempfile.TemporaryDirectory(prefix='flex-scx-') as td:
         td=Path(td)
         loader=td/'scx-loader'
-        run(['git','clone','--depth','1','https://github.com/sched-ext/scx-loader.git',str(loader)],check=True)
+        run(['git','init',str(loader)],check=True)
+        run(['git','-C',str(loader),'remote','add','origin','https://github.com/sched-ext/scx-loader.git'],check=True)
+        run(['git','-C',str(loader),'fetch','--depth','1','origin',SCX_LOADER_COMMIT],check=True,timeout=1800)
+        run(['git','-C',str(loader),'checkout','--detach',SCX_LOADER_COMMIT],check=True)
         sha=out(['git','-C',str(loader),'rev-parse','HEAD'])
+        if sha!=SCX_LOADER_COMMIT:raise SystemExit('Unexpected scx-loader source revision; refusing root build.')
         env=os.environ.copy();env.update({'VENDOR_PREFIX':'/usr','VENDOR_DATADIR':'/usr/share','VENDOR_SYSCONFDIR':'/etc','VENDOR_LIBDIR':'/usr/lib'})
         run(['cargo','xtask','install'],check=True,timeout=3600,env=env) if (loader/'xtask').exists() else run(['cargo','build','--release'],check=True,timeout=3600,env=env)
         if not shutil.which('scx_loader'):
