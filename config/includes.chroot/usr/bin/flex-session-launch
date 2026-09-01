@@ -14,7 +14,10 @@ runtime.mkdir(parents=True,exist_ok=True)
 sock=runtime/f"flexos-priv-{os.getpid()}-{secrets.token_hex(4)}.sock"
 
 helper=subprocess.Popen(
-    ["/usr/bin/pkexec","/usr/lib/flexos/flex-privileged-session","--socket",str(sock),"--uid",str(uid)],
+    [
+        "/usr/bin/pkexec","/usr/lib/flexos/flex-privileged-session",
+        "--socket",str(sock),"--uid",str(uid),"--launcher-pid",str(os.getpid()),
+    ],
     stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
 )
 ready=False
