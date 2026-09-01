@@ -6,6 +6,10 @@ from pathlib import Path
 APPS=Path("/usr/share/flexos/apps.json")
 PROFILE=Path("/etc/flexos/profile")
 IDENTITY=Path("/usr/share/flexos/identity.json")
+DESKTOP_PROFILE=Path("/etc/flexos/desktop-profile")
+MAX_BACKUP_ENTRY=64*1024*1024
+MAX_BACKUP_TOTAL=256*1024*1024
+MAX_BACKUP_RATIO=200
 
 def run(cmd,timeout=12):
     try:
@@ -27,6 +31,11 @@ def identity(): return load_json(IDENTITY)
 def current_profile():
     try:return PROFILE.read_text().strip() or "balanced"
     except Exception:return "balanced"
+
+def current_desktop():
+    try:profile=DESKTOP_PROFILE.read_text(encoding="utf-8").strip().lower()
+    except Exception:profile="kde"
+    return {"kde":"KDE Plasma","gnome":"GNOME","hyprland":"Hyprland"}.get(profile,profile or "Unknown")
 
 def hardware():
     d={
@@ -202,7 +211,7 @@ def create_backup(dest):
     with zipfile.ZipFile(dest,"w",zipfile.ZIP_DEFLATED) as z:
         z.writestr("manifest.json",json.dumps({
             "format":2,"created":int(time.time()),"profile":current_profile(),
-            "desktop":"KDE Plasma","flexos":identity()
+            "desktop":current_desktop(),"flexos":identity()
         },indent=2,ensure_ascii=False))
         for p in [
             home/".config/flexos",home/".config/kdeglobals",home/".config/kwinrc",
@@ -216,14 +225,25 @@ def create_backup(dest):
     return dest
 
 def restore_backup(src):
-    home=Path.home();n=0
+    home=Path.home();n=0;total=0
     with zipfile.ZipFile(src) as z:
         for i in z.infolist():
             if not i.filename.startswith("files/") or i.is_dir():continue
             rel=i.filename[6:]
             if rel.startswith("/") or ".." in Path(rel).parts:continue
             if not (rel.startswith(".config/") or rel.startswith(".local/share/konsole/")):continue
-            t=home/rel;t.parent.mkdir(parents=True,exist_ok=True);t.write_bytes(z.read(i));n+=1
+            if i.file_size>MAX_BACKUP_ENTRY:
+                raise ValueError(f"Backup entry is too large: {i.filename}")
+            ratio=i.file_size/max(1,i.compress_size)
+            if ratio>MAX_BACKUP_RATIO:
+                raise ValueError(f"Backup entry compression ratio is unsafe: {i.filename}")
+            total+=i.file_size
+            if total>MAX_BACKUP_TOTAL:
+                raise ValueError("Backup expands beyond the allowed size limit")
+            t=home/rel;t.parent.mkdir(parents=True,exist_ok=True)
+            with z.open(i,"r") as source,t.open("wb") as target:
+                shutil.copyfileobj(source,target,1024*1024)
+            n+=1
     return n
 
 def report_text():
