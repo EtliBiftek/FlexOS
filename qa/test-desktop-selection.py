@@ -15,6 +15,7 @@ dots=text('config/includes.chroot/usr/share/flexos/calamares/modules/contextualp
 hook=text('config/hooks/live/020-flexos-calamares.hook.chroot')
 installer=text('config/includes.chroot/usr/lib/flexos/flex-desktop-install')
 post=text('config/includes.chroot/usr/lib/flexos/flex-postinstall')
+packages=text('config/package-lists/flexos.list.chroot')
 
 # Calamares must pass the account created by the users module, not the live/root environment USER.
 check('${gs[username]}' in ctx,'desktop installer does not receive Calamares username')
@@ -32,10 +33,15 @@ for token in ('task-gnome-desktop','gnome-core','gdm3','gnome-session','gnome-sh
 check('/usr/share/wayland-sessions/gnome.desktop' in installer,'GNOME session is not verified')
 
 # Hyprland needs compositor, portal, Xwayland, session helpers, auth agent and a safe user config.
-for token in ('hyprland','quickshell','xdg-desktop-portal-hyprland','hypridle','hyprlock','hyprpaper','hyprpolkitagent','xwayland','pipewire','wireplumber'):
+for token in ('hyprland','uwsm','quickshell','xdg-desktop-portal-hyprland','hypridle','hyprlock','hyprpaper','hyprpolkitagent','xwayland','pipewire','wireplumber','libpam-systemd','dbus-user-session'):
     check(f'"{token}"' in installer,f'Hyprland profile missing {token}')
 check('/usr/share/wayland-sessions/hyprland.desktop' in installer,'Hyprland session is not verified')
+check('/usr/share/wayland-sessions/hyprland-uwsm.desktop' in installer,'Hyprland UWSM session is not verified')
 check('prepare_hyprland_user()' in installer,'Hyprland has no baseline per-user configuration')
+
+# The live image disables APT recommends, so login-session plumbing must be explicit.
+check('libpam-systemd' in packages,'live image omits libpam-systemd despite disabled apt recommends')
+check('dbus-user-session' in packages,'live image omits dbus-user-session despite disabled apt recommends')
 
 # Debian display-manager state must be explicit and re-checked at post-install.
 for source,name in ((installer,'desktop installer'),(post,'post-install')):
