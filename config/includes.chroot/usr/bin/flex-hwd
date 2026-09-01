@@ -55,15 +55,32 @@ def ensure_headers():
     pkg='linux-headers-'+k
     if available(pkg):subprocess.run(['apt-get','install','-y',pkg],check=True)
     if not (Path('/lib/modules')/k/'build').exists():raise SystemExit(f'Matching kernel headers are missing for {k}; refusing DKMS driver switch.')
+def secureboot_state():
+    if not Path('/sys/firmware/efi').exists():return 'disabled'
+    if not shutil.which('mokutil'):return 'unknown'
+    try:
+        p=subprocess.run(['mokutil','--sb-state'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=20)
+    except Exception:return 'unknown'
+    if p.returncode!=0:return 'unknown'
+    text=(p.stdout or '').lower()
+    if 'enabled' in text:return 'enabled'
+    if 'disabled' in text:return 'disabled'
+    return 'unknown'
 def secureboot_ready():
-    if not shutil.which('mokutil'):return True
-    sb='enabled' in out(['mokutil','--sb-state']).lower()
-    return not sb or (Path('/var/lib/flexos/secureboot/MOK.key').exists() and Path('/var/lib/flexos/secureboot/MOK.der').exists())
+    state=secureboot_state()
+    if state=='disabled':return True
+    if state!='enabled':raise SystemExit('Cannot determine Secure Boot state safely; refusing DKMS driver switch.')
+    key=Path('/var/lib/flexos/secureboot/MOK.key');der=Path('/var/lib/flexos/secureboot/MOK.der')
+    if not key.exists() or not der.exists():return False
+    try:
+        p=subprocess.run(['mokutil','--test-key',str(der)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=20)
+    except Exception:return False
+    return p.returncode==0
 def nvidia(mode):
     root();snapshot('Before NVIDIA driver switch');subprocess.run(['apt-get','update'],check=True)
     if mode in ('proprietary','open'):
         ensure_headers()
-        if not secureboot_ready():raise SystemExit('Secure Boot is enabled. Prepare/enroll FlexOS MOK with flex-secureboot before installing NVIDIA DKMS.')
+        if not secureboot_ready():raise SystemExit('Secure Boot is enabled. Prepare and enroll the FlexOS MOK with flex-secureboot before installing NVIDIA DKMS.')
     if mode=='proprietary':pk=['nvidia-driver','nvidia-settings'];pk=[x for x in pk if available(x)];subprocess.run(['apt-get','install','-y',*pk],check=True)
     elif mode=='open':
         pk=[x for x in ('nvidia-open-kernel-dkms','nvidia-driver-libs','nvidia-settings') if available(x)]
@@ -83,8 +100,10 @@ def apply_safe():
 def apply_handheld():
     root();kind=handheld()
     if kind=='none':raise SystemExit('No supported handheld profile detected.')
-    apply_safe();Path('/etc/flexos').mkdir(parents=True,exist_ok=True);Path('/etc/flexos/handheld-profile').write_text(kind+'\n')
-    subprocess.run(['apt-get','install','-y','power-profiles-daemon','gamemode','mangohud'],check=False)
+    apply_safe()
+    subprocess.run(['apt-get','install','-y','power-profiles-daemon','gamemode','mangohud'],check=True)
+    Path('/etc/flexos').mkdir(parents=True,exist_ok=True)
+    Path('/etc/flexos/handheld-profile').write_text(kind+'\n')
     print('Handheld profile:',kind,'applied. Gamescope can be installed from Flex Gaming.')
 def status():
     p,notes,g,n=safe_packages();print('CPU vendor:',cpu_vendor());print('GPU devices:',g);[print('  -',x) for x in notes];print('Network devices:',n);print('Handheld:',handheld());print('Safe hardware packages:');[print(f"  {'installed' if installed(x) else 'missing':9} {x}") for x in p]
