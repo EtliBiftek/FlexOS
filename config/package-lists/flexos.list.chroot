@@ -88,6 +88,9 @@ os-prober
 memtest86+
 calamares
 calamares-settings-debian
+qml6-module-qtquick
+qml6-module-qtquick-controls
+qml6-module-qtquick-layouts
 squashfs-tools
 cracklib-runtime
 firmware-linux-free
