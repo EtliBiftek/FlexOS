@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile, urllib.request
+import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile, urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 API="https://api.github.com/repos/EtliBiftek/FlexOS/releases/tags/packages-latest"
-UA={"User-Agent":"FlexOS-Self-Updater/0.5"}
+UA={"User-Agent":"FlexOS-Self-Updater/0.9"}
+PACKAGE_URL_PREFIX="https://github.com/EtliBiftek/FlexOS/releases/download/"
 
 def get(url, timeout=30):
     req=urllib.request.Request(url,headers=UA)
     with urllib.request.urlopen(req,timeout=timeout) as r:
         return r.read()
 
-def release_manifest():
-    release=json.loads(get(API).decode("utf-8"))
+def get_release():
+    return json.loads(get(API).decode("utf-8"))
+
+def release_manifest(release=None):
+    release=release or get_release()
     asset=next((x for x in release.get("assets",[]) if x.get("name")=="flexos-packages-manifest.json"),None)
     if not asset:
         raise RuntimeError("packages-latest does not contain flexos-packages-manifest.json")
@@ -48,31 +53,94 @@ def print_status(manifest, rows):
 def install(manifest, rows):
     if not rows:
         print_status(manifest,rows);return 0
-    tmp=Path(tempfile.mkdtemp(prefix="flexos-update-"))
-    os.chmod(tmp,0o755)
+    specs=[f"{item['name']}={item['version']}" for item in rows]
+    cmd=["pkexec","/usr/bin/flex-self-update","root-install",*specs]
+    return subprocess.run(cmd).returncode
+
+def valid_package_url(url):
     try:
-        names=[]
-        for item in rows:
-            filename=item["filename"]
-            dest=tmp/filename
-            print(f"Downloading {filename} ...",flush=True)
-            dest.write_bytes(get(item["url"],120))
-            digest=hashlib.sha256(dest.read_bytes()).hexdigest()
-            if digest.lower()!=item["sha256"].lower():
-                raise RuntimeError(f"SHA256 mismatch for {filename}")
-            os.chmod(dest,0o644)
-            names.append(filename)
-        cmd=["pkexec","/usr/lib/flexos/flex-admin","flexupdate","install",str(tmp),*names]
-        return subprocess.run(cmd).returncode
+        u=urlsplit(url)
+    except ValueError:
+        return False
+    return u.scheme=="https" and u.netloc=="github.com" and url.startswith(PACKAGE_URL_PREFIX)
+
+def root_install(specs):
+    if os.geteuid()!=0:
+        raise RuntimeError("root-install requires administrator privileges")
+    requested={}
+    for spec in specs:
+        if "=" not in spec:
+            raise RuntimeError(f"Invalid package update request: {spec}")
+        name,version=spec.split("=",1)
+        if not re.fullmatch(r"flexos-[a-z0-9+.-]+",name) or not version:
+            raise RuntimeError(f"Invalid package update request: {spec}")
+        requested[name]=version
+    if not requested:
+        return 0
+
+    manifest=release_manifest()
+    available={x.get("name"):x for x in manifest.get("packages",[]) if isinstance(x,dict)}
+    selected=[]
+    for name,version in requested.items():
+        item=available.get(name)
+        if not item or item.get("version")!=version:
+            raise RuntimeError(f"Requested update is no longer current: {name}={version}. Check again.")
+        filename=item.get("filename","")
+        digest=item.get("sha256","")
+        url=item.get("url","")
+        if not re.fullmatch(r"flexos-[A-Za-z0-9.+~_-]+\.deb",filename):
+            raise RuntimeError(f"Invalid package filename in manifest: {filename}")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}",digest):
+            raise RuntimeError(f"Invalid SHA256 in manifest for {filename}")
+        if not valid_package_url(url):
+            raise RuntimeError(f"Untrusted package URL in manifest for {filename}")
+        selected.append(item)
+
+    tmp=Path(tempfile.mkdtemp(prefix="flexos-update-root-",dir="/var/tmp"))
+    os.chmod(tmp,0o700)
+    try:
+        debs=[]
+        for item in selected:
+            dest=tmp/item["filename"]
+            print(f"Downloading {item['filename']} ...",flush=True)
+            req=urllib.request.Request(item["url"],headers=UA)
+            h=hashlib.sha256()
+            with urllib.request.urlopen(req,timeout=120) as r,dest.open("xb") as f:
+                while True:
+                    block=r.read(1024*1024)
+                    if not block:break
+                    h.update(block);f.write(block)
+                f.flush();os.fsync(f.fileno())
+            if h.hexdigest().lower()!=item["sha256"].lower():
+                raise RuntimeError(f"SHA256 mismatch for {item['filename']}")
+            os.chmod(dest,0o600)
+            debs.append(str(dest))
+        if not debs:
+            return 0
+        rc=subprocess.run(["dpkg","-i",*debs]).returncode
+        if rc:
+            subprocess.run(["apt-get","update"],check=True,timeout=600)
+            subprocess.run(["apt-get","-f","install","-y"],check=True,timeout=1800)
+            subprocess.run(["dpkg","-i",*debs],check=True,timeout=1200)
+        subprocess.run(["systemctl","daemon-reload"],check=False,timeout=30)
+        print("FlexOS component update completed. Restart affected applications if needed.")
+        return 0
     finally:
         shutil.rmtree(tmp,ignore_errors=True)
 
 def main():
     ap=argparse.ArgumentParser(description="Check and install FlexOS-authored component updates.")
-    ap.add_argument("action",choices=["check","install"])
+    ap.add_argument("action",choices=["check","install","root-install"])
+    ap.add_argument("packages",nargs="*")
     ap.add_argument("--json",action="store_true")
     args=ap.parse_args()
     try:
+        if args.action=="root-install":
+            if args.json:
+                raise RuntimeError("--json is not valid with root-install")
+            return root_install(args.packages)
+        if args.packages:
+            raise RuntimeError("Package arguments are only valid with root-install")
         manifest=release_manifest()
         rows=updates(manifest)
         if args.json:
