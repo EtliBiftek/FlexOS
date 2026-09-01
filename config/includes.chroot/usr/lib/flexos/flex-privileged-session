@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse, json, os, socket, subprocess, sys
+import argparse, json, os, socket, struct, subprocess, sys
 from pathlib import Path
 
 ALLOWED = {
@@ -21,19 +21,44 @@ ALLOWED = {
 def send(conn,obj):
     conn.sendall((json.dumps(obj,ensure_ascii=False)+"\n").encode())
 
-def peer_uid(conn):
-    if hasattr(socket,"SO_PEERCRED"):
-        raw=conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12)
-        return int.from_bytes(raw[4:8],sys.byteorder)
-    return None
+def peer_credentials(conn):
+    if not hasattr(socket,"SO_PEERCRED"):
+        return None
+    raw=conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize("3i"))
+    return struct.unpack("3i",raw)
+
+def parent_pid(pid):
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text(errors="ignore").splitlines():
+            if line.startswith("PPid:"):
+                return int(line.split(":",1)[1].strip())
+    except (OSError,ValueError):
+        pass
+    return 0
+
+def is_launcher_process(pid, launcher_pid):
+    current=pid
+    for _ in range(128):
+        if current==launcher_pid:
+            return True
+        if current<=1:
+            return False
+        nxt=parent_pid(current)
+        if nxt<=0 or nxt==current:
+            return False
+        current=nxt
+    return False
 
 ap=argparse.ArgumentParser()
 ap.add_argument("--socket",required=True)
 ap.add_argument("--uid",required=True,type=int)
+ap.add_argument("--launcher-pid",required=True,type=int)
 args=ap.parse_args()
 
 if os.geteuid()!=0:
     raise SystemExit("flex-privileged-session must run as root")
+if args.launcher_pid<=1:
+    raise SystemExit("Invalid privileged session launcher PID")
 
 sock_path=Path(args.socket)
 runtime=sock_path.parent.resolve()
@@ -56,8 +81,12 @@ try:
     while running:
         conn,_=server.accept()
         with conn:
-            uid=peer_uid(conn)
-            if uid is not None and uid!=args.uid:
+            creds=peer_credentials(conn)
+            if creds is None:
+                send(conn,{"type":"done","code":126,"message":"Peer credentials are unavailable; refusing privileged request."})
+                continue
+            pid,uid,_gid=creds
+            if uid!=args.uid or not is_launcher_process(pid,args.launcher_pid):
                 send(conn,{"type":"done","code":126,"message":"Unauthorized client."})
                 continue
             raw=b""
