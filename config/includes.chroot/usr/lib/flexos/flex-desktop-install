@@ -113,7 +113,10 @@ def prepare_hyprland_user():
             "$mod = SUPER\n"
             "monitor = , preferred, auto, 1\n\n"
             "exec-once = dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP\n"
-            "exec-once = systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP\n\n"
+            "exec-once = systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP\n"
+            "exec-once = swaybg -c 111111\n"
+            "exec-once = waybar\n"
+            "exec-once = mako\n\n"
             "input {\n"
             "    follow_mouse = 1\n"
             "}\n\n"
@@ -122,14 +125,20 @@ def prepare_hyprland_user():
             "    gaps_out = 8\n"
             "    border_size = 2\n"
             "}\n\n"
+            "decoration {\n"
+            "    rounding = 8\n"
+            "}\n\n"
             "misc {\n"
             "    disable_hyprland_logo = true\n"
+            "    disable_splash_rendering = true\n"
             "}\n\n"
             "bind = $mod, RETURN, exec, foot\n"
             "bind = $mod, D, exec, wofi --show drun\n"
+            "bind = $mod, E, exec, thunar\n"
             "bind = $mod, Q, killactive\n"
             "bind = $mod SHIFT, E, exit\n"
-            "bind = $mod, F, fullscreen\n",
+            "bind = $mod, F, fullscreen\n"
+            "bind = , Print, exec, grim -g \"$(slurp)\" - | wl-copy\n",
             encoding="utf-8",
         )
     chown_tree(config_dir)
@@ -175,12 +184,13 @@ try:
         # Keep the Hyprland ecosystem on the same Debian backports suite so its
         # rapidly-moving libraries remain ABI-compatible with the compositor.
         run(["apt-get", "install", "-y", "-t", "trixie-backports",
-             "hyprland", "uwsm", "quickshell", "xdg-desktop-portal-hyprland",
+             "hyprland", "hyprland-guiutils", "uwsm", "quickshell", "xdg-desktop-portal-hyprland",
              "hypridle", "hyprlock", "hyprpaper", "hyprpolkitagent"])
         helpers = [
             "sddm", "libpam-systemd", "network-manager", "pipewire", "wireplumber", "xwayland",
             "xdg-desktop-portal", "xdg-desktop-portal-gtk", "dbus-user-session",
-            "polkitd", "foot", "wofi", "grim", "slurp", "swaybg", "wl-clipboard",
+            "polkitd", "foot", "wofi", "waybar", "mako-notifier", "thunar", "pavucontrol",
+            "grim", "slurp", "swaybg", "wl-clipboard",
             "brightnessctl", "playerctl", "jq", "git", "curl", "rsync", "unzip",
             "gnome-keyring", "fish", "xdg-user-dirs", "xdg-utils",
             "fonts-noto", "fonts-noto-color-emoji", "mesa-vulkan-drivers", "libgl1-mesa-dri",
@@ -190,9 +200,10 @@ try:
         run(["apt-get", "purge", "-y", *plasma_core], timeout=3600)
         run(["apt-get", "autoremove", "-y"], timeout=1800)
         require_packages([
-            "hyprland", "uwsm", "quickshell", "xdg-desktop-portal-hyprland",
+            "hyprland", "hyprland-guiutils", "uwsm", "quickshell", "xdg-desktop-portal-hyprland",
             "hypridle", "hyprlock", "hyprpaper", "hyprpolkitagent",
             "sddm", "libpam-systemd", "dbus-user-session", "pipewire", "wireplumber", "xwayland",
+            "waybar", "mako-notifier", "thunar",
         ])
         verify_session("/usr/share/wayland-sessions/hyprland.desktop")
         verify_session("/usr/share/wayland-sessions/hyprland-uwsm.desktop")
