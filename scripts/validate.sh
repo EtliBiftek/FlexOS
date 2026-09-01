@@ -99,7 +99,9 @@ hook=Path("config/hooks/live/020-flexos-calamares.hook.chroot").read_text()
 for token in ("packagechooser@desktop","packagechooserq@hyprdots","contextualprocess@flexdesktop","contextualprocess@flexhyprdots","shellprocess@flexpostinstall","availableFileSystemTypes","stylesheet.qss"):
     assert token in hook, f"Calamares hook missing {token}"
 dots=Path("config/includes.chroot/usr/share/flexos/calamares/branding/hyprdots.qml").read_text()
-assert "pctrade" in dots and "end-4" in dots and "screenshots/" in dots and "model: 6" in dots
+assert 'config.packageChoice = "none"' in dots, "Hyprland chooser must keep the standard FlexOS option"
+assert 'config.packageChoice = "end4pc"' in dots, "Hyprland chooser must keep the end4-pC option"
+assert 'packagechooser_desktop' in dots and 'desktop !== "hyprland"' in dots, "Hyprland chooser must auto-skip for other desktops"
 print(f"structured validation OK ({len(pyfiles)} userland Python files compiled; kernel paths excluded)")
 PY
 [[ $errors -eq 0 ]] && ok "Python / JSON / SVG / desktop / beta invariants"
