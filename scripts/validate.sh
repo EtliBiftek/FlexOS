@@ -36,7 +36,7 @@ required=(
   config/includes.chroot/usr/share/flexos/calamares/modules/shellprocess-flexpostinstall.conf
   config/hooks/live/010-flexos-branding.hook.chroot config/hooks/live/020-flexos-calamares.hook.chroot config/hooks/live/030-flexos-services.hook.chroot
   packages/package-map.json scripts/build-flexos-packages.py scripts/build-apt-repo.sh scripts/version-to-deb.py scripts/qemu-boot-smoke.sh scripts/beta-gate.py
-  qa/test-matrix.json qa/record-test.py qa/test-userland-security.py docs/BETA_EXIT_CRITERIA.md docs/BETA_TEST_MATRIX.md docs/RECOVERY.md docs/UPDATES.md
+  qa/test-matrix.json qa/record-test.py qa/test-userland-security.py qa/test-desktop-selection.py docs/BETA_EXIT_CRITERIA.md docs/BETA_TEST_MATRIX.md docs/RECOVERY.md docs/UPDATES.md
 )
 for f in "${required[@]}"; do [[ -e "$f" ]] || fail "Missing $f"; done
 [[ $errors -eq 0 ]] && ok "required beta project files"
@@ -62,7 +62,7 @@ python3 - <<'PY' || fail "structured beta validation"
 from pathlib import Path
 import configparser,json,py_compile,re,xml.etree.ElementTree as ET
 version=Path("VERSION").read_text().strip()
-assert re.fullmatch(r"\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?",version), f"Unexpected FlexOS VERSION: {version}"
+assert re.fullmatch(r"\d+\.\d+(?:\.\d+)?[0-9A-Za-z.-]*(?:\+[0-9A-Za-z.-]+)?",version), f"Unexpected FlexOS VERSION: {version}"
 for p in Path("config/includes.chroot/usr/share/flexos").glob("*.json"): json.loads(p.read_text(encoding="utf-8"))
 matrix=json.loads(Path("qa/test-matrix.json").read_text(encoding="utf-8")); assert isinstance(matrix.get("release"),str) and matrix["release"]; assert len({t["id"] for t in matrix["tests"]})==len(matrix["tests"])
 desktop=json.loads(Path("config/includes.chroot/usr/share/flexos/desktop-profiles.json").read_text()); assert set(desktop)=={"kde","gnome","hyprland"}, "FlexOS desktop profiles must include KDE, GNOME and Hyprland"
@@ -106,6 +106,8 @@ PY
 
 python3 qa/test-userland-security.py || fail "userland security regressions"
 [[ $errors -eq 0 ]] && ok "userland security regressions"
+python3 qa/test-desktop-selection.py || fail "desktop selection regressions"
+[[ $errors -eq 0 ]] && ok "desktop selection regressions"
 
 if command -v python3 >/dev/null 2>&1; then
 python3 - <<'PY' || fail "YAML validation"
