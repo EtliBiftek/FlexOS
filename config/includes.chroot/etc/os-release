@@ -1,7 +1,7 @@
-PRETTY_NAME="FlexOS 0.9"
+PRETTY_NAME="FlexOS 0.9.4a"
 NAME="FlexOS"
-VERSION_ID="0.9"
-VERSION="0.9"
+VERSION_ID="0.9.4a"
+VERSION="0.9.4a"
 VERSION_CODENAME=trixie
 ID=flexos
 ID_LIKE=debian
@@ -11,4 +11,4 @@ BUG_REPORT_URL="https://github.com/EtliBiftek/FlexOS/issues"
 DOCUMENTATION_URL="https://github.com/EtliBiftek/FlexOS"
 LOGO=flexos-logo
 ANSI_COLOR="90"
-BUILD_ID="0.9"
+BUILD_ID="0.9.4a"
