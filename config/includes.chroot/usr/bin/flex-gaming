@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib, json, os, platform, shutil, subprocess, sys, tarfile, tempfile, urllib.request
+import hashlib, hmac, json, os, platform, re, shutil, subprocess, sys, tarfile, tempfile, urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 UA={'User-Agent':'FlexOS-gaming/1'}
 
@@ -16,6 +17,9 @@ def github_latest(repo):
     req=urllib.request.Request(f'https://api.github.com/repos/{repo}/releases/latest',headers=UA)
     with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
 def download_asset(asset,dst):
+    digest=asset.get('digest')
+    if not isinstance(digest,str) or not re.fullmatch(r'sha256:[0-9a-fA-F]{64}',digest):
+        raise SystemExit(f'Release asset has no trusted SHA-256 digest: {asset.get("name","unknown")}')
     req=urllib.request.Request(asset['browser_download_url'],headers=UA)
     h=hashlib.sha256()
     with urllib.request.urlopen(req,timeout=60) as r,open(dst,'wb') as f:
@@ -23,31 +27,58 @@ def download_asset(asset,dst):
             b=r.read(1024*1024)
             if not b:break
             h.update(b);f.write(b)
-    digest=asset.get('digest') or ''
-    if digest.startswith('sha256:') and h.hexdigest()!=digest.split(':',1)[1]:raise SystemExit(f'Checksum mismatch: {asset["name"]}')
+    expected=digest.split(':',1)[1].lower()
+    if not hmac.compare_digest(h.hexdigest().lower(),expected):
+        raise SystemExit(f'Checksum mismatch: {asset["name"]}')
     return h.hexdigest()
+def is_debian_archive_uri(value):
+    try:u=urlsplit(value)
+    except ValueError:return False
+    host=(u.hostname or '').lower()
+    return u.scheme in {'http','https'} and (host=='deb.debian.org' or host.endswith('.debian.org')) and u.path.rstrip('/')=='/debian'
+def add_components(values):
+    vals=list(values)
+    for c in ('main','contrib','non-free','non-free-firmware'):
+        if c not in vals:vals.append(c)
+    return vals
+def update_list_line(line):
+    stripped=line.lstrip()
+    if not (stripped.startswith('deb ') or stripped.startswith('deb-src ')) or stripped.startswith('#'):
+        return line
+    body,sep,comment=line.partition('#')
+    m=re.match(r'^(\s*deb(?:-src)?\s+(?:\[[^\]]+\]\s+)?)(\S+)(\s+\S+\s+)(.*?)(\s*)$',body)
+    if not m or not is_debian_archive_uri(m.group(2)):
+        return line
+    comps=add_components(m.group(4).split())
+    updated=m.group(1)+m.group(2)+m.group(3)+' '.join(comps)+m.group(5)
+    return updated+(sep+comment if sep else '')
+def update_sources_text(text):
+    pieces=[]
+    for stanza in re.split(r'(\n\s*\n)',text):
+        if not stanza or stanza.isspace():
+            pieces.append(stanza);continue
+        lines=stanza.splitlines()
+        uris=[]
+        for line in lines:
+            if line.startswith('URIs:'):uris.extend(line.split(':',1)[1].split())
+        if not any(is_debian_archive_uri(uri) for uri in uris):
+            pieces.append(stanza);continue
+        changed=[]
+        for line in lines:
+            if line.startswith('Components:'):
+                line='Components: '+' '.join(add_components(line.split(':',1)[1].split()))
+            changed.append(line)
+        pieces.append('\n'.join(changed)+('\n' if stanza.endswith('\n') else ''))
+    return ''.join(pieces)
 def ensure_nonfree():
     for p in (Path('/etc/apt/sources.list'),*Path('/etc/apt/sources.list.d').glob('*.list')):
         if not p.exists():continue
-        text=p.read_text(errors='ignore');out=[]
-        for line in text.splitlines():
-            if line.lstrip().startswith('deb ') and ' deb.debian.org' in line:
-                parts=line.split(); comps=parts[3:]
-                for c in ('contrib','non-free','non-free-firmware'):
-                    if c not in comps:parts.append(c)
-                line=' '.join(parts)
-            out.append(line)
-        p.write_text('\n'.join(out)+'\n')
+        text=p.read_text(errors='ignore')
+        new='\n'.join(update_list_line(line) for line in text.splitlines())+('\n' if text.endswith('\n') else '')
+        if new!=text:p.write_text(new)
     for p in Path('/etc/apt/sources.list.d').glob('*.sources'):
-        text=p.read_text(errors='ignore');lines=[]
-        for line in text.splitlines():
-            if line.startswith('Components:'):
-                vals=line.split(':',1)[1].split()
-                for c in ('main','contrib','non-free','non-free-firmware'):
-                    if c not in vals:vals.append(c)
-                line='Components: '+' '.join(vals)
-            lines.append(line)
-        p.write_text('\n'.join(lines)+'\n')
+        text=p.read_text(errors='ignore');new=update_sources_text(text)
+        if new!=text:p.write_text(new)
 def status():
     for p in ('gamemode','mangohud','goverlay','lutris','steam-installer','gamescope'):
         print(f'{p}:', 'installed' if installed(p) else 'not installed')
