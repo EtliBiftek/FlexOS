@@ -1,6 +1,6 @@
-version=0.9
-display=0.9
+version=0.9.4a
+display=0.9.4a
 channel=beta-development
 base=Debian 13 (Trixie)
-desktop=KDE Plasma 6
+desktop=KDE Plasma 6 / GNOME / Hyprland
 creator=Pifo
