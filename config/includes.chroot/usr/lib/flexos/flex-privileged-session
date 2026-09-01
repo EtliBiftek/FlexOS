@@ -14,6 +14,7 @@ ALLOWED = {
     "/usr/bin/flex-ananicy",
     "/usr/bin/flex-performance-config",
     "/usr/bin/flex-gaming",
+    "/usr/bin/flex-self-update",
     "/usr/bin/flex-kernel-manager",
     "/usr/bin/flex-secureboot",
 }
